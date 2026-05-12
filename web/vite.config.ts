@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   base: process.env.NODE_ENV === 'production' ? '/merriott-social-venue/' : '/',
   build: {
-    outDir: '../dist',
+    outDir: '../docs',
     emptyOutDir: true,
   },
   server: {

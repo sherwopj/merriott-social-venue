@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+  <rect width="800" height="500" fill="#1a4558"/>
+  <rect x="40" y="40" width="720" height="420" fill="none" stroke="#c9a050" stroke-width="2" opacity="0.5"/>
+  <text x="400" y="260" text-anchor="middle" font-family="Georgia,serif" font-size="28" fill="#c9a050">Event image</text>
+</svg>

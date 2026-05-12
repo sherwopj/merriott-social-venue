@@ -20,7 +20,6 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd web
         npm ci
 
     - name: Build

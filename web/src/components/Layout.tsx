@@ -25,7 +25,7 @@ export function Layout() {
               className={({ isActive }) => `${navLinkClass({ isActive })} nav-link--cta`}
             >
               <span className="nav-text-desktop">Book function room</span>
-              <span className="nav-text-mobile">Book Room</span>
+              <span className="nav-text-mobile">Bookings</span>
             </NavLink>
           </nav>
         </div>

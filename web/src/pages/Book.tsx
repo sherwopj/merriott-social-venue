@@ -186,7 +186,10 @@ export function Book() {
 
         <div className="cal-legend">
           <div className="cal-legend__item">
-            <span className="cal-legend__box cal-legend__box--available"></span> Available
+            <span className="cal-legend__box cal-legend__box--available-day"></span> Day Available
+          </div>
+          <div className="cal-legend__item">
+            <span className="cal-legend__box cal-legend__box--available-eve"></span> Eve Available
           </div>
           <div className="cal-legend__item">
             <span className="cal-legend__box cal-legend__box--busy"></span> Booked

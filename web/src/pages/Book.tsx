@@ -222,7 +222,7 @@ export function Book() {
             {cells.map((c, i) => {
               if (c.kind === 'empty') return <div key={`e-${i}`} className="cal-grid__cell cal-grid__cell--empty" />
               const { isDayBusy, isEveningBusy } = getDayStatus(c.iso, busy)
-              const isPast = c.iso < todayStr
+              const isPast = c.iso <= todayStr
 
               const daySelected = selectedSlot?.date === c.iso && selectedSlot?.type === 'day'
               const eveSelected = selectedSlot?.date === c.iso && selectedSlot?.type === 'evening'

@@ -1,7 +1,7 @@
 import { Gallery } from '../components/Gallery'
 import rosette from '../assets/rosette.png'
 
-const BANNER_SRC = 'assets/banner.png'
+const BANNER_SRC = '../assets/banner.png'
 const EMAIL_ADDRESS = 'merriottsocialvenue@gmail.com'
 
 export function Home() {

@@ -40,13 +40,43 @@ app.get('/api/calendar/availability', (req, res) => {
 })
 
 app.post('/api/bookings', (req, res) => {
-  const { name, email, phone, date, notes } = req.body ?? {}
-  if (typeof name !== 'string' || typeof email !== 'string' || typeof phone !== 'string' || typeof date !== 'string') {
-    res.status(400).json({ error: 'name, email, phone, and date are required' })
+  const {
+    name,
+    email,
+    phone,
+    address,
+    date,
+    startTime,
+    endTime,
+    eventType,
+    attendees,
+    exemption,
+    declaration,
+    notes,
+  } = req.body ?? {}
+
+  if (!name || !email || !phone || !date || !declaration) {
+    res.status(400).json({ error: 'Required fields missing: name, email, phone, date, and declaration are required.' })
     return
   }
+
   const reference = `MSV-${Date.now().toString(36).toUpperCase()}`
-  console.info('[booking]', { reference, name, email, phone, date, notes })
+  console.info('[booking]', {
+    reference,
+    name,
+    email,
+    phone,
+    address,
+    date,
+    startTime,
+    endTime,
+    eventType,
+    attendees,
+    exemption,
+    declaration,
+    notes,
+  })
+
   res.json({ ok: true, reference })
 })
 

@@ -43,8 +43,15 @@ export function Book() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
   const [name, setName] = useState('')
+  const [address, setAddress] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [startTime, setStartTime] = useState('18:00')
+  const [endTime, setEndTime] = useState('22:00')
+  const [eventType, setEventType] = useState('')
+  const [attendees, setAttendees] = useState('')
+  const [exemption, setExemption] = useState('none')
+  const [declaration, setDeclaration] = useState(false)
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitMessage, setSubmitMessage] = useState<string | null>(null)
@@ -115,7 +122,14 @@ export function Book() {
           name,
           email,
           phone,
+          address,
           date: selectedDate,
+          startTime,
+          endTime,
+          eventType,
+          attendees: Number(attendees),
+          exemption,
+          declaration,
           notes,
         }),
       })
@@ -127,8 +141,15 @@ export function Book() {
           : 'Thanks — your request was received. We will be in touch to confirm.',
       )
       setName('')
+      setAddress('')
       setEmail('')
       setPhone('')
+      setStartTime('18:00')
+      setEndTime('22:00')
+      setEventType('')
+      setAttendees('')
+      setExemption('none')
+      setDeclaration(false)
       setNotes('')
       setSelectedDate(null)
       void loadAvailability()
@@ -199,39 +220,98 @@ export function Book() {
         </div>
 
         <form className="book-form" onSubmit={onSubmit}>
-          <h2 className="section-title section-title--small">Your details</h2>
-          <label className="field">
-            <span>Name</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
-          </label>
-          <label className="field">
-            <span>Email</span>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-          </label>
-          <label className="field">
-            <span>Phone</span>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-              autoComplete="tel"
-            />
-          </label>
-          <label className="field">
-            <span>Selected date</span>
-            <input value={selectedDate ?? ''} readOnly required placeholder="Pick a day above" />
-          </label>
-          <label className="field">
-            <span>Notes (occasion, approximate guests, setup needs)</span>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} />
-          </label>
+          <div className="book-form__section">
+            <h2 className="section-title section-title--small">Hirer Details</h2>
+            <label className="field">
+              <span>Full Name</span>
+              <input value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
+            </label>
+            <label className="field">
+              <span>Address</span>
+              <textarea value={address} onChange={(e) => setAddress(e.target.value)} required rows={2} />
+            </label>
+            <div className="field-row">
+              <label className="field">
+                <span>Email Address</span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
+              </label>
+              <label className="field">
+                <span>Telephone Number</span>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  required
+                  autoComplete="tel"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="book-form__section">
+            <h2 className="section-title section-title--small">Booking Details</h2>
+            <label className="field">
+              <span>Selected Date</span>
+              <input value={selectedDate ?? ''} readOnly required placeholder="Pick a day in the calendar above" />
+            </label>
+            <div className="field-row">
+              <label className="field">
+                <span>Start Time</span>
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+              </label>
+              <label className="field">
+                <span>End Time</span>
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
+              </label>
+            </div>
+            <p className="field-hint">Note: Bookings are typically in 4-hour blocks.</p>
+            <label className="field">
+              <span>Type of Event</span>
+              <input value={eventType} onChange={(e) => setEventType(e.target.value)} required placeholder="e.g. Birthday Party, Meeting" />
+            </label>
+            <label className="field">
+              <span>Estimated Number of Attendees</span>
+              <input type="number" value={attendees} onChange={(e) => setAttendees(e.target.value)} required min="1" />
+            </label>
+          </div>
+
+          <div className="book-form__section">
+            <h2 className="section-title section-title--small">Exemptions & Notes</h2>
+            <div className="field">
+              <span>Hire Charge Exemption</span>
+              <select value={exemption} onChange={(e) => setExemption(e.target.value)}>
+                <option value="none">None - Regular Hire (£25)</option>
+                <option value="adult_evening">Adult evening event (30+ bar users)</option>
+                <option value="funeral">Funeral / Wake</option>
+                <option value="charity">Charity Event</option>
+              </select>
+              <p className="field-hint">Cleaning deposit (£30) is required in all cases.</p>
+            </div>
+            <label className="field">
+              <span>Additional Notes</span>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Any specific setup needs or requests?" />
+            </label>
+          </div>
+
+          <div className="book-form__section book-form__section--terms">
+            <h2 className="section-title section-title--small">Terms & Declaration</h2>
+            <ul className="terms-list">
+              <li>A £30 cleaning deposit is required and will be refunded if the room is left clean and tidy.</li>
+              <li>The hirer is responsible for all attendees and their behaviour.</li>
+              <li>Any damage may result in loss of deposit and additional charges.</li>
+            </ul>
+            <label className="checkbox-field">
+              <input type="checkbox" checked={declaration} onChange={(e) => setDeclaration(e.target.checked)} required />
+              <span>I confirm the information is correct and agree to the terms above.</span>
+            </label>
+          </div>
+
           <button type="submit" className="btn btn--primary" disabled={submitting}>
             {submitting ? 'Sending…' : 'Request provisional booking'}
           </button>

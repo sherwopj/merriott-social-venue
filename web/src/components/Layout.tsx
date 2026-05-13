@@ -1,9 +1,12 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   isActive ? 'nav-link nav-link--active' : 'nav-link'
 
 export function Layout() {
+  const location = useLocation()
+  const isBookingPage = location.pathname === '/book'
+
   return (
     <div className="layout">
       <header className="site-header">
@@ -39,11 +42,13 @@ export function Layout() {
         <p>Merriott Social Venue · Merriott, Somerset, UK</p>
       </footer>
 
-      <div className="sticky-book" role="region" aria-label="Book the function room">
-        <NavLink to="/book" className="sticky-book__btn">
-          Book function room
-        </NavLink>
-      </div>
+      {!isBookingPage && (
+        <div className="sticky-book" role="region" aria-label="Book the function room">
+          <NavLink to="/book" className="sticky-book__btn">
+            Book function room
+          </NavLink>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,3 +1,5 @@
+import rosette from '../assets/rosette.png'
+
 const modules = import.meta.glob<{ default: string }>(
   '../assets/gallery/*.{jpg,jpeg,png,gif,webp,svg}',
   { eager: true, import: 'default' },
@@ -25,6 +27,9 @@ export function Gallery() {
             <img src={src} alt="Gallery item" loading="lazy" />
           </div>
         ))}
+      </div>
+      <div className="gallery-rosette">
+        <img src={rosette} alt="Merriott Social Venue Rosette" />
       </div>
     </div>
   )

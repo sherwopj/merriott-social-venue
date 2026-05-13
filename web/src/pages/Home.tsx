@@ -9,7 +9,7 @@ export function Home() {
         <div className="hero-banner">
           <img
             src={BANNER_SRC}
-            alt="Merriott Social Venue — The more the Merriott — Open Everyday"
+            alt="Merriott Social Venue — The more the Merriott"
             className="hero-banner__img"
             width={1600}
             height={400}
@@ -22,7 +22,7 @@ export function Home() {
           />
           <div className="hero-banner__fallback" hidden>
             <p className="hero-banner__fallback-title">Merriott Social Venue</p>
-            <p className="hero-banner__fallback-tagline">The more the Merriott — Open Everyday</p>
+            <p className="hero-banner__fallback-tagline">The more the Merriott</p>
           </div>
         </div>
       </section>

@@ -9,6 +9,16 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
     <title>Merriott Social Venue</title>
+    <script type="text/javascript">
+      (function(l) {
+        if (l.pathname.indexOf('/merriott-social-venue') !== -1 && l.pathname.length > 22 && !l.hash) {
+          var path = l.pathname.split('/merriott-social-venue')[1];
+          if (path && path !== '/') {
+            window.location.replace('/merriott-social-venue/#' + path);
+          }
+        }
+      }(window.location))
+    </script>
   </head>
   <body>
     <div id="root"></div>

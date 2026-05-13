@@ -38,9 +38,11 @@ export function Home() {
         <div className="container prose">
           <h1>Welcome</h1>
           <p>
-            Merriott Social Venue is a friendly community club in the heart of Merriott, Somerset.
-            Whether you are after a quiet drink, a club night, or a space to celebrate with friends
-            and family, you are welcome through our doors.
+            Merriott Social Venue is a friendly community club in the heart of Merriott, Somerset. Whether you are after a quiet drink and a game of darts or pool, a club night, or a space to gather with friends and family, you are welcome through our doors, no membership required.
+            <br />
+            Family and dog friendly.
+            <br />
+            We are a non profit organisation and are supported by our volunteers. We are always looking for more volunteers, so if you think you could support us, please get in touch!
           </p>
         </div>
       </section>

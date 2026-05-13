@@ -14,13 +14,18 @@ export function Gallery() {
     )
   }
 
+  // Duplicate images for a seamless infinite scroll effect
+  const marqueeImages = [...imageUrls, ...imageUrls, ...imageUrls]
+
   return (
-    <ul className="gallery-grid">
-      {imageUrls.map((src) => (
-        <li key={src}>
-          <img src={src} alt="" loading="lazy" decoding="async" />
-        </li>
-      ))}
-    </ul>
+    <div className="gallery-container">
+      <div className="gallery-marquee">
+        {marqueeImages.map((src, index) => (
+          <div key={`${src}-${index}`} className="gallery-marquee__item">
+            <img src={src} alt="Gallery item" loading="lazy" />
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

@@ -30,6 +30,10 @@ export function Home() {
         </div>
       </section>
 
+      <section className="section section--gallery-top">
+        <Gallery />
+      </section>
+
       <section className="section section--tight">
         <div className="container prose">
           <h1>Welcome</h1>
@@ -38,13 +42,6 @@ export function Home() {
             Whether you are after a quiet drink, a club night, or a space to celebrate with friends
             and family, you are welcome through our doors.
           </p>
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="container">
-          <h2 className="section-title">Gallery</h2>
-          <Gallery />
         </div>
       </section>
 

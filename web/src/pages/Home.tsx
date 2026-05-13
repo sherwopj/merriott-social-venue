@@ -1,7 +1,7 @@
 import { Gallery } from '../components/Gallery'
 import rosette from '../assets/rosette.png'
+import banner from '../assets/banner.png'
 
-const BANNER_SRC = '../assets/banner.png'
 const EMAIL_ADDRESS = 'merriottsocialvenue@gmail.com'
 
 export function Home() {
@@ -10,7 +10,7 @@ export function Home() {
       <section className="hero" aria-label="Merriott Social Venue">
         <div className="hero-banner">
           <img
-            src={BANNER_SRC}
+            src={banner}
             alt="Merriott Social Venue — The more the Merriott"
             className="hero-banner__img"
             width={1600}

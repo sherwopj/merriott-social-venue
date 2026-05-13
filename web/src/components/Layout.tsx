@@ -17,13 +17,15 @@ export function Layout() {
               Home
             </NavLink>
             <NavLink to="/events" className={navLinkClass}>
-              Weekly events
+              <span className="nav-text-desktop">Weekly events</span>
+              <span className="nav-text-mobile">Events</span>
             </NavLink>
             <NavLink
               to="/book"
               className={({ isActive }) => `${navLinkClass({ isActive })} nav-link--cta`}
             >
-              Book function room
+              <span className="nav-text-desktop">Book function room</span>
+              <span className="nav-text-mobile">Book</span>
             </NavLink>
           </nav>
         </div>

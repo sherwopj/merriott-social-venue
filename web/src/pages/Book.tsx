@@ -258,6 +258,38 @@ export function Book() {
 
         <form className="book-form" onSubmit={onSubmit}>
           <div className="book-form__section">
+            <h2 className="section-title section-title--small">Booking Details</h2>
+            <label className="field">
+              <span>Selected Slot</span>
+              <input
+                value={selectedSlot ? `${selectedSlot.date} (${selectedSlot.type === 'day' ? 'Day' : 'Evening'})` : ''}
+                readOnly
+                required
+                placeholder="Pick a slot in the calendar above"
+              />
+            </label>
+            <div className="field-row">
+              <label className="field">
+                <span>Start Time</span>
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+              </label>
+              <label className="field">
+                <span>End Time</span>
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
+              </label>
+            </div>
+            <p className="field-hint">Note: Bookings are typically in 4-hour blocks.</p>
+            <label className="field">
+              <span>Type of Event</span>
+              <input value={eventType} onChange={(e) => setEventType(e.target.value)} required placeholder="e.g. Birthday Party, Meeting" />
+            </label>
+            <label className="field">
+              <span>Estimated Number of Attendees</span>
+              <input type="number" value={attendees} onChange={(e) => setAttendees(e.target.value)} required min="1" />
+            </label>
+          </div>
+
+          <div className="book-form__section">
             <h2 className="section-title section-title--small">Hirer Details</h2>
             <label className="field">
               <span>Full Name</span>
@@ -289,38 +321,6 @@ export function Book() {
                 />
               </label>
             </div>
-          </div>
-
-          <div className="book-form__section">
-            <h2 className="section-title section-title--small">Booking Details</h2>
-            <label className="field">
-              <span>Selected Slot</span>
-              <input
-                value={selectedSlot ? `${selectedSlot.date} (${selectedSlot.type === 'day' ? 'Day' : 'Evening'})` : ''}
-                readOnly
-                required
-                placeholder="Pick a slot in the calendar above"
-              />
-            </label>
-            <div className="field-row">
-              <label className="field">
-                <span>Start Time</span>
-                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
-              </label>
-              <label className="field">
-                <span>End Time</span>
-                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
-              </label>
-            </div>
-            <p className="field-hint">Note: Bookings are typically in 4-hour blocks.</p>
-            <label className="field">
-              <span>Type of Event</span>
-              <input value={eventType} onChange={(e) => setEventType(e.target.value)} required placeholder="e.g. Birthday Party, Meeting" />
-            </label>
-            <label className="field">
-              <span>Estimated Number of Attendees</span>
-              <input type="number" value={attendees} onChange={(e) => setAttendees(e.target.value)} required min="1" />
-            </label>
           </div>
 
           <div className="book-form__section">

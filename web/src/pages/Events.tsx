@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { weekdayOrder, weekdayLabels, weeklyEvents } from '../data/weeklyEvents'
 
 export function Events() {
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+
   return (
     <section className="section">
       <div className="container">
@@ -19,11 +22,23 @@ export function Events() {
                   <div className="events-day__grid">
                     {events.map((ev, idx) => (
                       <article key={`${day}-${idx}`} className="events-card">
-                        <div className="events-card__media">
-                          <img src={ev.image} alt={ev.title} loading="lazy" decoding="async" />
-                        </div>
+                        <button
+                          className="events-card__media-btn"
+                          onClick={() => setSelectedImage(ev.image)}
+                          aria-label={`View full size image for ${ev.title}`}
+                        >
+                          <div className="events-card__media">
+                            <img src={ev.image} alt={ev.title} loading="lazy" decoding="async" />
+                            <div className="events-card__zoom-hint">Click to enlarge</div>
+                          </div>
+                        </button>
                         <div className="events-card__body">
-                          <h3>{ev.title}</h3>
+                          <button
+                            className="events-card__title-btn"
+                            onClick={() => setSelectedImage(ev.image)}
+                          >
+                            <h3>{ev.title}</h3>
+                          </button>
                           <p>{ev.description}</p>
                           {ev.note && (
                             <p className="events-card__note">
@@ -42,6 +57,17 @@ export function Events() {
           })}
         </ul>
       </div>
+
+      {selectedImage && (
+        <div className="lightbox" onClick={() => setSelectedImage(null)} role="dialog" aria-modal="true">
+          <div className="lightbox__content">
+            <img src={selectedImage} alt="Full size event poster" />
+            <button className="lightbox__close" onClick={() => setSelectedImage(null)} aria-label="Close lightbox">
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

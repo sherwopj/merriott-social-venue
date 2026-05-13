@@ -107,12 +107,20 @@
     justify-content: space-between;
   }
 
+  .brand {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.35rem;
+  }
+
   .brand__sub {
-    display: none;
+    display: inline;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
   }
 
   .brand__main {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     letter-spacing: 0.02em;
   }
 

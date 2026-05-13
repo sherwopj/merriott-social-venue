@@ -24,14 +24,22 @@ function daysInMonth(year: number, monthIndex: number) {
   return new Date(year, monthIndex + 1, 0).getDate()
 }
 
-function dayHasBusy(dayStr: string, busy: BusySlot[]) {
+function getDayStatus(dayStr: string, busy: BusySlot[]) {
   const dayStart = new Date(`${dayStr}T00:00:00.000Z`).getTime()
-  const dayEnd = dayStart + 86400000
-  return busy.some((b) => {
+  const splitPoint = dayStart + 18 * 60 * 60 * 1000 // 6pm
+  const dayEnd = dayStart + 24 * 60 * 60 * 1000
+
+  let isDayBusy = false
+  let isEveningBusy = false
+
+  for (const b of busy) {
     const s = new Date(b.start).getTime()
     const e = new Date(b.end).getTime()
-    return s < dayEnd && e > dayStart
-  })
+    if (s < splitPoint && e > dayStart) isDayBusy = true
+    if (s < dayEnd && e > splitPoint) isEveningBusy = true
+  }
+
+  return { isDayBusy, isEveningBusy }
 }
 
 export function Book() {
@@ -40,7 +48,7 @@ export function Book() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [calendarConfigured, setCalendarConfigured] = useState(true)
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [selectedSlot, setSelectedSlot] = useState<{ date: string; type: 'day' | 'evening' } | null>(null)
 
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
@@ -109,8 +117,8 @@ export function Book() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setSubmitMessage(null)
-    if (!selectedDate) {
-      setSubmitMessage('Please choose an available date.')
+    if (!selectedSlot) {
+      setSubmitMessage('Please choose an available day or evening slot.')
       return
     }
     setSubmitting(true)
@@ -123,7 +131,8 @@ export function Book() {
           email,
           phone,
           address,
-          date: selectedDate,
+          date: selectedSlot.date,
+          slotType: selectedSlot.type,
           startTime,
           endTime,
           eventType,
@@ -151,7 +160,7 @@ export function Book() {
       setExemption('none')
       setDeclaration(false)
       setNotes('')
-      setSelectedDate(null)
+      setSelectedSlot(null)
       void loadAvailability()
     } catch (err) {
       setSubmitMessage(err instanceof Error ? err.message : 'Something went wrong.')
@@ -172,9 +181,20 @@ export function Book() {
         {!calendarConfigured && (
           <p className="notice">
             Calendar integration is not configured on the server yet — all dates show as available.
-            The venue should set Google Calendar credentials on the API service.
           </p>
         )}
+
+        <div className="cal-legend">
+          <div className="cal-legend__item">
+            <span className="cal-legend__box cal-legend__box--available"></span> Available
+          </div>
+          <div className="cal-legend__item">
+            <span className="cal-legend__box cal-legend__box--busy"></span> Booked
+          </div>
+          <div className="cal-legend__item">
+            <span className="cal-legend__box cal-legend__box--selected"></span> Your Selection
+          </div>
+        </div>
 
         <div className="book-calendar">
           <div className="book-calendar__toolbar">
@@ -198,22 +218,36 @@ export function Book() {
             ))}
             {cells.map((c, i) => {
               if (c.kind === 'empty') return <div key={`e-${i}`} className="cal-grid__cell cal-grid__cell--empty" />
-              const blocked = dayHasBusy(c.iso, busy)
+              const { isDayBusy, isEveningBusy } = getDayStatus(c.iso, busy)
               const isPast = c.iso < todayStr
-              const disabled = blocked || isPast
-              const selected = selectedDate === c.iso
+
+              const daySelected = selectedSlot?.date === c.iso && selectedSlot?.type === 'day'
+              const eveSelected = selectedSlot?.date === c.iso && selectedSlot?.type === 'evening'
+
               return (
-                <button
-                  key={c.iso}
-                  type="button"
-                  role="gridcell"
-                  className={`cal-grid__cell cal-grid__day${disabled ? ' cal-grid__day--disabled' : ''}${selected ? ' cal-grid__day--selected' : ''}${blocked ? ' cal-grid__day--busy' : ''}`}
-                  disabled={disabled}
-                  onClick={() => setSelectedDate(c.iso)}
-                >
-                  <span className="cal-grid__num">{c.day}</span>
-                  {blocked ? <span className="cal-grid__badge">Busy</span> : null}
-                </button>
+                <div key={c.iso} className="cal-grid__cell cal-grid__day-container">
+                  <span className="cal-grid__day-num">{c.day}</span>
+                  <div className="cal-grid__slots">
+                    <button
+                      type="button"
+                      className={`cal-slot cal-slot--day${isDayBusy ? ' cal-slot--busy' : ''}${daySelected ? ' cal-slot--selected' : ''}`}
+                      disabled={isDayBusy || isPast}
+                      onClick={() => setSelectedSlot({ date: c.iso!, type: 'day' })}
+                      aria-label={`Book Day slot on ${c.iso}`}
+                    >
+                      Day
+                    </button>
+                    <button
+                      type="button"
+                      className={`cal-slot cal-slot--evening${isEveningBusy ? ' cal-slot--busy' : ''}${eveSelected ? ' cal-slot--selected' : ''}`}
+                      disabled={isEveningBusy || isPast}
+                      onClick={() => setSelectedSlot({ date: c.iso!, type: 'evening' })}
+                      aria-label={`Book Evening slot on ${c.iso}`}
+                    >
+                      Eve
+                    </button>
+                  </div>
+                </div>
               )
             })}
           </div>
@@ -257,8 +291,13 @@ export function Book() {
           <div className="book-form__section">
             <h2 className="section-title section-title--small">Booking Details</h2>
             <label className="field">
-              <span>Selected Date</span>
-              <input value={selectedDate ?? ''} readOnly required placeholder="Pick a day in the calendar above" />
+              <span>Selected Slot</span>
+              <input
+                value={selectedSlot ? `${selectedSlot.date} (${selectedSlot.type === 'day' ? 'Day' : 'Evening'})` : ''}
+                readOnly
+                required
+                placeholder="Pick a slot in the calendar above"
+              />
             </label>
             <div className="field-row">
               <label className="field">

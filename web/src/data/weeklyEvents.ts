@@ -1,3 +1,12 @@
+import mondayBingo from '../assets/weekly-events/monday_bingoPoster.png'
+import sundayQuiz from '../assets/weekly-events/sunday_quizNight.png'
+import tuesdayKarate from '../assets/weekly-events/tuesday_learnKarate.png'
+import tuesdaySkittles from '../assets/weekly-events/tuesday_skittles_league.jpg'
+import wednesdayPool from '../assets/weekly-events/wednesday_freePoolWednesdays.png'
+import wednesdayOpenMic from '../assets/weekly-events/wednesday_openMic_monthly_3rd_wednesday.png'
+import thursdayKarate from '../assets/weekly-events/thursday_learnKarate.png'
+import thursdaySkittles from '../assets/weekly-events/thursday_skittles_league.jpg'
+
 export type Weekday =
   | 'monday'
   | 'tuesday'
@@ -11,6 +20,7 @@ export type WeekdayEvent = {
   title: string
   description: string
   image: string
+  note?: string
 }
 
 export const weekdayOrder: Weekday[] = [
@@ -33,37 +43,65 @@ export const weekdayLabels: Record<Weekday, string> = {
   sunday: 'Sunday',
 }
 
-export const weeklyEvents: Record<Weekday, WeekdayEvent | null> = {
-  monday: {
-    title: 'Members’ night',
-    description:
-      'Relaxed evening in the bar — pool, darts, and good company. New faces always welcome.',
-    image: '/events/placeholder.svg',
-  },
-  tuesday: null,
-  wednesday: {
-    title: 'Quiz night',
-    description:
-      'Teams of up to six. Small entry fee with prizes. Arrive from 7:30pm for an 8:00pm start.',
-    image: '/events/placeholder.svg',
-  },
-  thursday: null,
-  friday: {
-    title: 'Live music (monthly)',
-    description:
-      'Check the notice board for this month’s date. Dancing optional, enjoyment guaranteed.',
-    image: '/events/placeholder.svg',
-  },
-  saturday: {
-    title: 'Sports on screen',
-    description:
-      'Key matches on the big screen when schedules allow. Family-friendly until late afternoon.',
-    image: '/events/placeholder.svg',
-  },
-  sunday: {
-    title: 'Sunday social',
-    description:
-      'Quiet pints and papers from midday. A proper end to the week in Merriott.',
-    image: '/events/placeholder.svg',
-  },
+export const weeklyEvents: Record<Weekday, WeekdayEvent[] | null> = {
+  monday: [
+    {
+      title: 'Bingo Night',
+      description: 'Eyes down! Join us for a fun evening of Bingo with great prizes.',
+      image: mondayBingo,
+    },
+  ],
+  tuesday: [
+    {
+      title: 'Learn Karate',
+      description: 'Martial arts classes for all ages and skill levels.',
+      image: tuesdayKarate,
+    },
+    {
+      title: 'Skittles League',
+      description: 'Local league matches. Come and support the home team!',
+      image: tuesdaySkittles,
+    },
+  ],
+  wednesday: [
+    {
+      title: 'Free Pool Wednesdays',
+      description: 'Enjoy a few frames of pool on the house all evening.',
+      image: wednesdayPool,
+    },
+    {
+      title: 'Open Mic Night',
+      description: 'Show off your talent or just enjoy the local acts.',
+      image: wednesdayOpenMic,
+      note: 'Happens once per month (usually 3rd Wednesday)',
+    },
+  ],
+  thursday: [
+    {
+      title: 'Learn Karate',
+      description: 'Martial arts classes for all ages and skill levels.',
+      image: thursdayKarate,
+    },
+    {
+      title: 'Skittles League',
+      description: 'Local league matches. Come and support the home team!',
+      image: thursdaySkittles,
+    },
+  ],
+  friday: [
+    {
+      title: 'Live Music',
+      description: 'Check the notice board for this month’s featured bands.',
+      image: '/events/placeholder.svg',
+      note: 'Usually monthly — check for dates',
+    },
+  ],
+  saturday: null,
+  sunday: [
+    {
+      title: 'Quiz Night',
+      description: 'Test your knowledge! Teams of up to six, arrive 7:30pm for 8:00pm start.',
+      image: sundayQuiz,
+    },
+  ],
 }

@@ -354,6 +354,19 @@
   margin: 0;
 }
 
+.events-day__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.events-card__note {
+  margin-top: 0.75rem !important;
+  font-size: 0.85rem !important;
+  color: var(--color-accent) !important;
+  font-style: italic;
+}
+
 .notice {
   background: rgba(201, 160, 80, 0.12);
   border: 1px solid rgba(201, 160, 80, 0.35);

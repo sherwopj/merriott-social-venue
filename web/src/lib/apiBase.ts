@@ -1,7 +1,7 @@
 export function getApiBase(): string {
   const env = import.meta.env.VITE_API_URL
   if (env && env.length > 0) return env.replace(/\/$/, '')
-  return ''
+  return 'https://merriott-social-venue.onrender.com'
 }
 
 export function apiUrl(path: string): string {

@@ -36,7 +36,7 @@ jobs:
       - name: Build 🏗️
         run: |
           cd web
-          npm run build
+          VITE_API_URL=https://merriott-social-venue.onrender.com npm run build
           cp ../docs/index.html ../docs/404.html
 
       - name: Upload artifact 📤

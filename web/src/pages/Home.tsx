@@ -1,4 +1,5 @@
 import { Gallery } from '../components/Gallery'
+import rosette from '../assets/rosette.png'
 
 const BANNER_SRC = '/banner.jpg'
 
@@ -24,6 +25,7 @@ export function Home() {
             <p className="hero-banner__fallback-title">Merriott Social Venue</p>
             <p className="hero-banner__fallback-tagline">The more the Merriott</p>
           </div>
+          <img src={rosette} className="hero-rosette" alt="Rosette" />
         </div>
       </section>
 

@@ -28,9 +28,6 @@ export function Gallery() {
           </div>
         ))}
       </div>
-      <div className="gallery-rosette">
-        <img src={rosette} alt="Merriott Social Venue Rosette" />
-      </div>
     </div>
   )
 }

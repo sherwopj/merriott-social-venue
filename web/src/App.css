@@ -565,20 +565,20 @@ code {
   transform: scale(1.02);
 }
 
-.gallery-rosette {
+.hero-rosette {
   position: absolute;
-  bottom: -20px;
-  right: 20px;
-  width: clamp(80px, 15vw, 140px);
-  z-index: 10;
+  bottom: -40px; /* Overhang the gallery */
+  right: 5%;
+  width: clamp(100px, 20vw, 180px); /* Larger size */
+  z-index: 25; /* Above gallery marquee */
   pointer-events: none;
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
-  transform: rotate(5deg);
-  transition: transform 0.3s ease;
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.45));
+  transform: rotate(8deg);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.gallery-container:hover .gallery-rosette {
-  transform: rotate(10deg) scale(1.05);
+.hero-banner:hover .hero-rosette {
+  transform: rotate(12deg) scale(1.1);
 }
 
 @keyframes scroll {

@@ -875,8 +875,8 @@ code {
 
 .hero-rosette {
   position: absolute;
-  bottom: -40px; /* Overhang the gallery */
-  right: 5%;
+  bottom: -15px; /* Nestled more into the banner */
+  right: 8%;
   width: clamp(100px, 20vw, 180px); /* Larger size */
   z-index: 25; /* Above gallery marquee */
   pointer-events: none;

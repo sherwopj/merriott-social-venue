@@ -37,7 +37,8 @@ jobs:
         run: |
           cd web
           VITE_API_URL=https://merriott-social-venue.onrender.com npm run build
-          cp ../docs/index.html ../docs/404.html
+          cd ..
+          cp docs/index.html docs/404.html
 
       - name: Upload artifact 📤
         uses: actions/upload-pages-artifact@v3

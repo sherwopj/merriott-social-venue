@@ -622,12 +622,12 @@
 }
 
 .cal-slot--day {
-  background: #ffeb3b; /* Vibrant Yellow */
-  color: #000000;
+  background: #2196f3; /* Vibrant Blue */
+  color: #ffffff;
 }
 
 .cal-slot--day:hover:not(:disabled) {
-  background: #fdd835;
+  background: #1e88e5;
 }
 
 .cal-slot--evening {
@@ -673,8 +673,8 @@
 }
 
 .cal-legend__box--available-day {
-  background: #ffeb3b;
-  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: #2196f3;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .cal-legend__box--available-eve {

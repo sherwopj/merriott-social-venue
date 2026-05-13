@@ -2,6 +2,7 @@ import { Gallery } from '../components/Gallery'
 import rosette from '../assets/rosette.png'
 
 const BANNER_SRC = '/banner.jpg'
+const EMAIL_ADDRESS = 'merriottsocialvenue@gmail.com'
 
 export function Home() {
   return (
@@ -51,17 +52,31 @@ export function Home() {
             <p>
               <strong>Merriott Social Venue</strong>
               <br />
+              71 Lower Street
+              <br />
               Merriott, Somerset
+              <br />
+              TA16 5NP
               <br />
               United Kingdom
             </p>
             <p>
+              Telephone:{' '}
+              <a href="tel:+447471593040">07471 593040</a>
+            </p>
+            <p>
               Email:{' '}
-              <a href="mailto:bookings@merriottsocial.example">bookings@merriottsocial.example</a>
+              <a href={`mailto:${EMAIL_ADDRESS}`}>{EMAIL_ADDRESS}</a>
             </p>
-            <p className="muted small">
-              Replace the address and email above with your real details in <code>Home.tsx</code>.
-            </p>
+            <div className="contact-socials">
+              <p>
+                Follow us:
+                <br />
+                <a href="https://www.facebook.com/socialclubmerriott" target="_blank" rel="noopener noreferrer">Facebook</a>
+                {' | '}
+                <a href="https://www.instagram.com/themert1844/" target="_blank" rel="noopener noreferrer">Instagram</a>
+              </p>
+            </div>
           </div>
         </div>
       </section>

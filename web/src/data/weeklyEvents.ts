@@ -88,14 +88,7 @@ export const weeklyEvents: Record<Weekday, WeekdayEvent[] | null> = {
       image: thursdaySkittles,
     },
   ],
-  friday: [
-    {
-      title: 'Live Music',
-      description: 'Check the notice board for this month’s featured bands.',
-      image: '/events/placeholder.svg',
-      note: 'Usually monthly — check for dates',
-    },
-  ],
+  friday: null,
   saturday: null,
   sunday: [
     {

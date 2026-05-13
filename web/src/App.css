@@ -287,6 +287,16 @@
   margin-bottom: 0;
 }
 
+.contact-socials {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(201, 160, 80, 0.15);
+}
+
+.contact-socials p {
+  margin-bottom: 0;
+}
+
 .events-week {
   list-style: none;
   margin: 0;

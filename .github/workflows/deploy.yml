@@ -37,6 +37,7 @@ jobs:
         run: |
           cd web
           npm run build
+          cp ../docs/index.html ../docs/404.html
 
       - name: Upload artifact 📤
         uses: actions/upload-pages-artifact@v3

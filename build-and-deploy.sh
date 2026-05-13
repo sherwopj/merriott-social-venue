@@ -8,6 +8,7 @@ npm install
 
 # Build the site
 npm run build:web
+cp docs/index.html docs/404.html
 
 echo "✅ Build completed!"
 echo "📁 Built files are in ./docs directory"

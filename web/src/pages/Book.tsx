@@ -54,6 +54,7 @@ export function Book() {
   const [address, setAddress] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [middleName, setMiddleName] = useState('')
   const [startTime, setStartTime] = useState('18:00')
   const [endTime, setEndTime] = useState('22:00')
   const [eventType, setEventType] = useState('')
@@ -130,6 +131,7 @@ export function Book() {
           name,
           email,
           phone,
+          middleName,
           address,
           date: selectedSlot.date,
           slotType: selectedSlot.type,
@@ -153,6 +155,7 @@ export function Book() {
       setAddress('')
       setEmail('')
       setPhone('')
+      setMiddleName('')
       setStartTime('18:00')
       setEndTime('22:00')
       setEventType('')
@@ -257,6 +260,20 @@ export function Book() {
         </div>
 
         <form className="book-form" onSubmit={onSubmit}>
+          {/* Honeypot field for anti-spam */}
+          <div className="hp-field" aria-hidden="true">
+            <label htmlFor="middleName">Middle Name</label>
+            <input
+              id="middleName"
+              type="text"
+              name="middleName"
+              tabIndex={-1}
+              autoComplete="off"
+              value={middleName}
+              onChange={(e) => setMiddleName(e.target.value)}
+            />
+          </div>
+
           <div className="book-form__section">
             <h2 className="section-title section-title--small">Booking Details</h2>
             <label className="field">

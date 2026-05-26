@@ -23,6 +23,10 @@ export function Layout() {
               <span className="nav-text-desktop">Weekly events</span>
               <span className="nav-text-mobile">Events</span>
             </NavLink>
+            <NavLink to="/team" className={navLinkClass}>
+              <span className="nav-text-desktop">Meet the team</span>
+              <span className="nav-text-mobile">Team</span>
+            </NavLink>
             <NavLink
               to="/book"
               className={({ isActive }) => `${navLinkClass({ isActive })} nav-link--cta`}

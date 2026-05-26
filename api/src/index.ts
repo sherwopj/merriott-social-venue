@@ -80,6 +80,7 @@ app.post('/api/bookings', (req, res) => {
     name,
     email,
     phone,
+    middleName,
     address,
     date,
     startTime,
@@ -90,6 +91,14 @@ app.post('/api/bookings', (req, res) => {
     declaration,
     notes,
   } = req.body ?? {}
+
+  // Honeypot anti-spam check
+  if (middleName) {
+    const fakeReference = `MSV-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
+    console.warn(`[spam-blocked] Blocked automated bot booking with reference ${fakeReference}. (Honeypot hit: middleName='${middleName}')`)
+    res.json({ ok: true, reference: fakeReference })
+    return
+  }
 
   if (!name || !email || !phone || !date || !declaration) {
     res.status(400).json({ error: 'Required fields missing: name, email, phone, date, and declaration are required.' })

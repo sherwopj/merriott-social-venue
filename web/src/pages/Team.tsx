@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 
 // Import all committee and staff images dynamically
 const committeeModules = import.meta.glob<{ default: string }>(
@@ -178,6 +179,17 @@ export function Team() {
               </article>
             ))}
           </div>
+        </div>
+
+        <div className="team-cta">
+          <h2 className="team-cta__title">Want to make a difference in your community?</h2>
+          <p className="team-cta__text">
+            We're always looking for fresh ideas and new energy. No experience needed — just a
+            willingness to help keep Merriott Social Venue at the heart of our village.
+          </p>
+          <Link to="/join" className="btn btn--primary btn--large">
+            Join the Team
+          </Link>
         </div>
       </div>
     </section>

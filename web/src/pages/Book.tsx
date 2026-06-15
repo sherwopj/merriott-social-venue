@@ -181,201 +181,209 @@ export function Book() {
           details, deposit, and access times.
         </p>
 
-        {!calendarConfigured && (
-          <p className="notice">
-            Calendar integration is not configured on the server yet — all dates show as available.
-          </p>
-        )}
+        {loading ? (
+          <div className="loader-container">
+            <div className="spinner" role="status" aria-label="Loading" />
+            <p className="muted">Checking availability calendar…</p>
+          </div>
+        ) : (
+          <>
+            {!calendarConfigured && (
+              <p className="notice">
+                Calendar integration is not configured on the server yet — all dates show as available.
+              </p>
+            )}
 
-        <div className="cal-legend">
-          <div className="cal-legend__item">
-            <span className="cal-legend__box cal-legend__box--available-day"></span> Day Available
-          </div>
-          <div className="cal-legend__item">
-            <span className="cal-legend__box cal-legend__box--available-eve"></span> Eve Available
-          </div>
-          <div className="cal-legend__item">
-            <span className="cal-legend__box cal-legend__box--busy"></span> Booked
-          </div>
-          <div className="cal-legend__item">
-            <span className="cal-legend__box cal-legend__box--selected"></span> Your Selection
-          </div>
-        </div>
-
-        <div className="book-calendar">
-          <div className="book-calendar__toolbar">
-            <button type="button" className="btn btn--ghost" onClick={() => setCursor(addMonths(cursor, -1))}>
-              Previous
-            </button>
-            <h2 className="book-calendar__title">
-              {cursor.toLocaleString('en-GB', { month: 'long', year: 'numeric' })}
-            </h2>
-            <button type="button" className="btn btn--ghost" onClick={() => setCursor(addMonths(cursor, 1))}>
-              Next
-            </button>
-          </div>
-          {loading && <p className="muted">Loading availability…</p>}
-          {error && <p className="error-text">{error}</p>}
-          <div className="cal-grid" role="grid" aria-label="Select a date">
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
-              <div key={d} className="cal-grid__head" role="columnheader">
-                {d}
+            <div className="cal-legend">
+              <div className="cal-legend__item">
+                <span className="cal-legend__box cal-legend__box--available-day"></span> Day Available
               </div>
-            ))}
-            {cells.map((c, i) => {
-              if (c.kind === 'empty') return <div key={`e-${i}`} className="cal-grid__cell cal-grid__cell--empty" />
-              const { isDayBusy, isEveningBusy } = getDayStatus(c.iso, busy)
-              const isPast = c.iso <= todayStr
+              <div className="cal-legend__item">
+                <span className="cal-legend__box cal-legend__box--available-eve"></span> Eve Available
+              </div>
+              <div className="cal-legend__item">
+                <span className="cal-legend__box cal-legend__box--busy"></span> Booked
+              </div>
+              <div className="cal-legend__item">
+                <span className="cal-legend__box cal-legend__box--selected"></span> Your Selection
+              </div>
+            </div>
 
-              const daySelected = selectedSlot?.date === c.iso && selectedSlot?.type === 'day'
-              const eveSelected = selectedSlot?.date === c.iso && selectedSlot?.type === 'evening'
-
-              return (
-                <div key={c.iso} className="cal-grid__cell cal-grid__day-container">
-                  <span className="cal-grid__day-num">{c.day}</span>
-                  <div className="cal-grid__slots">
-                    <button
-                      type="button"
-                      className={`cal-slot cal-slot--day${isDayBusy ? ' cal-slot--busy' : ''}${daySelected ? ' cal-slot--selected' : ''}`}
-                      disabled={isDayBusy || isPast}
-                      onClick={() => setSelectedSlot({ date: c.iso!, type: 'day' })}
-                      aria-label={`Book Day slot on ${c.iso}`}
-                    >
-                      Day
-                    </button>
-                    <button
-                      type="button"
-                      className={`cal-slot cal-slot--evening${isEveningBusy ? ' cal-slot--busy' : ''}${eveSelected ? ' cal-slot--selected' : ''}`}
-                      disabled={isEveningBusy || isPast}
-                      onClick={() => setSelectedSlot({ date: c.iso!, type: 'evening' })}
-                      aria-label={`Book Evening slot on ${c.iso}`}
-                    >
-                      Eve
-                    </button>
+            <div className="book-calendar">
+              <div className="book-calendar__toolbar">
+                <button type="button" className="btn btn--ghost" onClick={() => setCursor(addMonths(cursor, -1))}>
+                  Previous
+                </button>
+                <h2 className="book-calendar__title">
+                  {cursor.toLocaleString('en-GB', { month: 'long', year: 'numeric' })}
+                </h2>
+                <button type="button" className="btn btn--ghost" onClick={() => setCursor(addMonths(cursor, 1))}>
+                  Next
+                </button>
+              </div>
+              {error && <p className="error-text">{error}</p>}
+              <div className="cal-grid" role="grid" aria-label="Select a date">
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
+                  <div key={d} className="cal-grid__head" role="columnheader">
+                    {d}
                   </div>
+                ))}
+                {cells.map((c, i) => {
+                  if (c.kind === 'empty') return <div key={`e-${i}`} className="cal-grid__cell cal-grid__cell--empty" />
+                  const { isDayBusy, isEveningBusy } = getDayStatus(c.iso, busy)
+                  const isPast = c.iso <= todayStr
+
+                  const daySelected = selectedSlot?.date === c.iso && selectedSlot?.type === 'day'
+                  const eveSelected = selectedSlot?.date === c.iso && selectedSlot?.type === 'evening'
+
+                  return (
+                    <div key={c.iso} className="cal-grid__cell cal-grid__day-container">
+                      <span className="cal-grid__day-num">{c.day}</span>
+                      <div className="cal-grid__slots">
+                        <button
+                          type="button"
+                          className={`cal-slot cal-slot--day${isDayBusy ? ' cal-slot--busy' : ''}${daySelected ? ' cal-slot--selected' : ''}`}
+                          disabled={isDayBusy || isPast}
+                          onClick={() => setSelectedSlot({ date: c.iso!, type: 'day' })}
+                          aria-label={`Book Day slot on ${c.iso}`}
+                        >
+                          Day
+                        </button>
+                        <button
+                          type="button"
+                          className={`cal-slot cal-slot--evening${isEveningBusy ? ' cal-slot--busy' : ''}${eveSelected ? ' cal-slot--selected' : ''}`}
+                          disabled={isEveningBusy || isPast}
+                          onClick={() => setSelectedSlot({ date: c.iso!, type: 'evening' })}
+                          aria-label={`Book Evening slot on ${c.iso}`}
+                        >
+                          Eve
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <form className="book-form" onSubmit={onSubmit}>
+              {/* Honeypot field for anti-spam */}
+              <div className="hp-field" aria-hidden="true">
+                <label htmlFor="middleName">Middle Name</label>
+                <input
+                  id="middleName"
+                  type="text"
+                  name="middleName"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={middleName}
+                  onChange={(e) => setMiddleName(e.target.value)}
+                />
+              </div>
+
+              <div className="book-form__section">
+                <h2 className="section-title section-title--small">Booking Details</h2>
+                <label className="field">
+                  <span>Selected Slot</span>
+                  <input
+                    value={selectedSlot ? `${selectedSlot.date} (${selectedSlot.type === 'day' ? 'Day' : 'Evening'})` : ''}
+                    readOnly
+                    required
+                    placeholder="Pick a slot in the calendar above"
+                  />
+                </label>
+                <div className="field-row">
+                  <label className="field">
+                    <span>Start Time</span>
+                    <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+                  </label>
+                  <label className="field">
+                    <span>End Time</span>
+                    <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
+                  </label>
                 </div>
-              )
-            })}
-          </div>
-        </div>
+                <p className="field-hint">Note: Bookings are typically in 4-hour blocks.</p>
+                <label className="field">
+                  <span>Type of Event</span>
+                  <input value={eventType} onChange={(e) => setEventType(e.target.value)} required placeholder="e.g. Birthday Party, Meeting" />
+                </label>
+                <label className="field">
+                  <span>Estimated Number of Attendees</span>
+                  <input type="number" value={attendees} onChange={(e) => setAttendees(e.target.value)} required min="1" />
+                </label>
+              </div>
 
-        <form className="book-form" onSubmit={onSubmit}>
-          {/* Honeypot field for anti-spam */}
-          <div className="hp-field" aria-hidden="true">
-            <label htmlFor="middleName">Middle Name</label>
-            <input
-              id="middleName"
-              type="text"
-              name="middleName"
-              tabIndex={-1}
-              autoComplete="off"
-              value={middleName}
-              onChange={(e) => setMiddleName(e.target.value)}
-            />
-          </div>
+              <div className="book-form__section">
+                <h2 className="section-title section-title--small">Hirer Details</h2>
+                <label className="field">
+                  <span>Full Name</span>
+                  <input value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
+                </label>
+                <label className="field">
+                  <span>Address</span>
+                  <textarea value={address} onChange={(e) => setAddress(e.target.value)} required rows={2} />
+                </label>
+                <div className="field-row">
+                  <label className="field">
+                    <span>Email Address</span>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Telephone Number</span>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      required
+                      autoComplete="tel"
+                    />
+                  </label>
+                </div>
+              </div>
 
-          <div className="book-form__section">
-            <h2 className="section-title section-title--small">Booking Details</h2>
-            <label className="field">
-              <span>Selected Slot</span>
-              <input
-                value={selectedSlot ? `${selectedSlot.date} (${selectedSlot.type === 'day' ? 'Day' : 'Evening'})` : ''}
-                readOnly
-                required
-                placeholder="Pick a slot in the calendar above"
-              />
-            </label>
-            <div className="field-row">
-              <label className="field">
-                <span>Start Time</span>
-                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
-              </label>
-              <label className="field">
-                <span>End Time</span>
-                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
-              </label>
-            </div>
-            <p className="field-hint">Note: Bookings are typically in 4-hour blocks.</p>
-            <label className="field">
-              <span>Type of Event</span>
-              <input value={eventType} onChange={(e) => setEventType(e.target.value)} required placeholder="e.g. Birthday Party, Meeting" />
-            </label>
-            <label className="field">
-              <span>Estimated Number of Attendees</span>
-              <input type="number" value={attendees} onChange={(e) => setAttendees(e.target.value)} required min="1" />
-            </label>
-          </div>
+              <div className="book-form__section">
+                <h2 className="section-title section-title--small">Exemptions & Notes</h2>
+                <div className="field">
+                  <span>Hire Charge Exemption</span>
+                  <select value={exemption} onChange={(e) => setExemption(e.target.value)}>
+                    <option value="none">None - Regular Hire (£25)</option>
+                    <option value="adult_evening">Adult evening event (30+ bar users)</option>
+                    <option value="funeral">Funeral / Wake</option>
+                    <option value="charity">Charity Event</option>
+                  </select>
+                  <p className="field-hint">Cleaning deposit (£30) is required in all cases.</p>
+                </div>
+                <label className="field">
+                  <span>Additional Notes</span>
+                  <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Any specific setup needs or requests?" />
+                </label>
+              </div>
 
-          <div className="book-form__section">
-            <h2 className="section-title section-title--small">Hirer Details</h2>
-            <label className="field">
-              <span>Full Name</span>
-              <input value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
-            </label>
-            <label className="field">
-              <span>Address</span>
-              <textarea value={address} onChange={(e) => setAddress(e.target.value)} required rows={2} />
-            </label>
-            <div className="field-row">
-              <label className="field">
-                <span>Email Address</span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                />
-              </label>
-              <label className="field">
-                <span>Telephone Number</span>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  required
-                  autoComplete="tel"
-                />
-              </label>
-            </div>
-          </div>
+              <div className="book-form__section book-form__section--terms">
+                <h2 className="section-title section-title--small">Terms & Declaration</h2>
+                <ul className="terms-list">
+                  <li>A £30 cleaning deposit is required and will be refunded if the room is left clean and tidy.</li>
+                  <li>The hirer is responsible for all attendees and their behaviour.</li>
+                  <li>Any damage may result in loss of deposit and additional charges.</li>
+                </ul>
+                <label className="checkbox-field">
+                  <input type="checkbox" checked={declaration} onChange={(e) => setDeclaration(e.target.checked)} required />
+                  <span>I confirm the information is correct and agree to the terms above.</span>
+                </label>
+              </div>
 
-          <div className="book-form__section">
-            <h2 className="section-title section-title--small">Exemptions & Notes</h2>
-            <div className="field">
-              <span>Hire Charge Exemption</span>
-              <select value={exemption} onChange={(e) => setExemption(e.target.value)}>
-                <option value="none">None - Regular Hire (£25)</option>
-                <option value="adult_evening">Adult evening event (30+ bar users)</option>
-                <option value="funeral">Funeral / Wake</option>
-                <option value="charity">Charity Event</option>
-              </select>
-              <p className="field-hint">Cleaning deposit (£30) is required in all cases.</p>
-            </div>
-            <label className="field">
-              <span>Additional Notes</span>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Any specific setup needs or requests?" />
-            </label>
-          </div>
-
-          <div className="book-form__section book-form__section--terms">
-            <h2 className="section-title section-title--small">Terms & Declaration</h2>
-            <ul className="terms-list">
-              <li>A £30 cleaning deposit is required and will be refunded if the room is left clean and tidy.</li>
-              <li>The hirer is responsible for all attendees and their behaviour.</li>
-              <li>Any damage may result in loss of deposit and additional charges.</li>
-            </ul>
-            <label className="checkbox-field">
-              <input type="checkbox" checked={declaration} onChange={(e) => setDeclaration(e.target.checked)} required />
-              <span>I confirm the information is correct and agree to the terms above.</span>
-            </label>
-          </div>
-
-          <button type="submit" className="btn btn--primary" disabled={submitting}>
-            {submitting ? 'Sending…' : 'Request provisional booking'}
-          </button>
-          {submitMessage && <p className="submit-message">{submitMessage}</p>}
-        </form>
+              <button type="submit" className="btn btn--primary" disabled={submitting}>
+                {submitting ? 'Sending…' : 'Request provisional booking'}
+              </button>
+              {submitMessage && <p className="submit-message">{submitMessage}</p>}
+            </form>
+          </>
+        )}
       </div>
     </section>
   )

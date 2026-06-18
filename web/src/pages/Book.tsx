@@ -31,6 +31,8 @@ const EXEMPTION_LABELS: Record<string, string> = {
   charity: 'Charity Event',
 }
 
+const EMAIL_ADDRESS = 'merriottsocialvenue@gmail.com'
+
 function formatDate(iso: string) {
   const d = new Date(iso + 'T12:00:00')
   return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
@@ -155,7 +157,15 @@ function BookingSuccess({ booking, onReset }: { booking: BookingConfirmation; on
           <li>If you need to get in touch sooner, please call the venue during opening hours.</li>
         </ol>
         <p className="booking-success__contact-hint">
-          📞 You can reach us at the venue — see the <a href="/#contact">Contact section</a> on our home page for details.
+          📞 You can reach us at the venue:
+          <p>
+            Telephone:{' '}
+            <a href="tel:+447471593040">07471 593040</a>
+          </p>
+          <p>
+            Email:{' '}
+            <a href={`mailto:${EMAIL_ADDRESS}`}>{EMAIL_ADDRESS}</a>
+          </p>
         </p>
       </div>
 

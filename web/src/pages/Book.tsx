@@ -8,6 +8,42 @@ type AvailabilityResponse = {
   calendarConfigured: boolean
 }
 
+type BookingConfirmation = {
+  reference: string
+  name: string
+  email: string
+  phone: string
+  address: string
+  date: string
+  slotType: 'day' | 'evening'
+  startTime: string
+  endTime: string
+  eventType: string
+  attendees: string
+  exemption: string
+  notes: string
+}
+
+const EXEMPTION_LABELS: Record<string, string> = {
+  none: 'None – Regular Hire (£25)',
+  adult_evening: 'Adult evening event (30+ bar users)',
+  funeral: 'Funeral / Wake',
+  charity: 'Charity Event',
+}
+
+function formatDate(iso: string) {
+  const d = new Date(iso + 'T12:00:00')
+  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function formatTime(t: string) {
+  const [h, m] = t.split(':')
+  const hour = Number(h)
+  const suffix = hour >= 12 ? 'pm' : 'am'
+  const display = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
+  return `${display}:${m}${suffix}`
+}
+
 function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1)
 }
@@ -42,6 +78,95 @@ function getDayStatus(dayStr: string, busy: BusySlot[]) {
   return { isDayBusy, isEveningBusy }
 }
 
+/* ── Success Screen ── */
+function BookingSuccess({ booking, onReset }: { booking: BookingConfirmation; onReset: () => void }) {
+  return (
+    <div className="booking-success">
+      <div className="booking-success__icon" aria-hidden="true">✓</div>
+      <h2 className="booking-success__title">Booking Request Received</h2>
+      <p className="booking-success__ref">
+        Reference: <strong>{booking.reference}</strong>
+      </p>
+      <p className="booking-success__message">
+        Thank you, {booking.name}. Your provisional booking request has been submitted successfully.
+      </p>
+
+      <div className="booking-success__details">
+        <h3 className="booking-success__details-title">Your Booking Summary</h3>
+        <dl className="booking-success__dl">
+          <div className="booking-success__row">
+            <dt>Date</dt>
+            <dd>{formatDate(booking.date)}</dd>
+          </div>
+          <div className="booking-success__row">
+            <dt>Session</dt>
+            <dd>{booking.slotType === 'day' ? 'Daytime' : 'Evening'}</dd>
+          </div>
+          <div className="booking-success__row">
+            <dt>Time</dt>
+            <dd>{formatTime(booking.startTime)} – {formatTime(booking.endTime)}</dd>
+          </div>
+          <div className="booking-success__row">
+            <dt>Event Type</dt>
+            <dd>{booking.eventType}</dd>
+          </div>
+          <div className="booking-success__row">
+            <dt>Attendees</dt>
+            <dd>{booking.attendees}</dd>
+          </div>
+          <div className="booking-success__row">
+            <dt>Exemption</dt>
+            <dd>{EXEMPTION_LABELS[booking.exemption] || booking.exemption}</dd>
+          </div>
+          {booking.notes && (
+            <div className="booking-success__row">
+              <dt>Notes</dt>
+              <dd>{booking.notes}</dd>
+            </div>
+          )}
+        </dl>
+
+        <h3 className="booking-success__details-title" style={{ marginTop: '1.5rem' }}>Your Contact Details</h3>
+        <dl className="booking-success__dl">
+          <div className="booking-success__row">
+            <dt>Name</dt>
+            <dd>{booking.name}</dd>
+          </div>
+          <div className="booking-success__row">
+            <dt>Email</dt>
+            <dd>{booking.email}</dd>
+          </div>
+          <div className="booking-success__row">
+            <dt>Phone</dt>
+            <dd>{booking.phone}</dd>
+          </div>
+          <div className="booking-success__row">
+            <dt>Address</dt>
+            <dd>{booking.address}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div className="booking-success__next-steps">
+        <h3 className="booking-success__next-title">What happens next?</h3>
+        <ol className="booking-success__steps-list">
+          <li>A member of the Merriott Social Venue team will review your request.</li>
+          <li>We will be in contact shortly to confirm availability, discuss any details, and arrange payment.</li>
+          <li>If you need to get in touch sooner, please call the venue during opening hours.</li>
+        </ol>
+        <p className="booking-success__contact-hint">
+          📞 You can reach us at the venue — see the <a href="/#contact">Contact section</a> on our home page for details.
+        </p>
+      </div>
+
+      <button type="button" className="btn btn--ghost btn--back" onClick={onReset}>
+        ← Make another booking
+      </button>
+    </div>
+  )
+}
+
+/* ── Main Page ── */
 export function Book() {
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()))
   const [busy, setBusy] = useState<BusySlot[]>([])
@@ -63,7 +188,8 @@ export function Book() {
   const [declaration, setDeclaration] = useState(false)
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [submitMessage, setSubmitMessage] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null)
 
   const range = useMemo(() => {
     const start = startOfMonth(cursor)
@@ -117,9 +243,9 @@ export function Book() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    setSubmitMessage(null)
+    setSubmitError(null)
     if (!selectedSlot) {
-      setSubmitMessage('Please choose an available day or evening slot.')
+      setSubmitError('Please choose an available day or evening slot.')
       return
     }
     setSubmitting(true)
@@ -146,30 +272,60 @@ export function Book() {
       })
       const body = (await res.json().catch(() => ({}))) as { ok?: boolean; reference?: string; error?: string }
       if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`)
-      setSubmitMessage(
-        body.reference
-          ? `Thanks — your request is logged (reference ${body.reference}). We will be in touch to confirm.`
-          : 'Thanks — your request was received. We will be in touch to confirm.',
-      )
-      setName('')
-      setAddress('')
-      setEmail('')
-      setPhone('')
-      setMiddleName('')
-      setStartTime('18:00')
-      setEndTime('22:00')
-      setEventType('')
-      setAttendees('')
-      setExemption('none')
-      setDeclaration(false)
-      setNotes('')
-      setSelectedSlot(null)
-      void loadAvailability()
+
+      // Scroll to top to show the success screen
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+
+      setConfirmation({
+        reference: body.reference || 'MSV-PENDING',
+        name,
+        email,
+        phone,
+        address,
+        date: selectedSlot.date,
+        slotType: selectedSlot.type,
+        startTime,
+        endTime,
+        eventType,
+        attendees,
+        exemption,
+        notes,
+      })
     } catch (err) {
-      setSubmitMessage(err instanceof Error ? err.message : 'Something went wrong.')
+      setSubmitError(err instanceof Error ? err.message : 'Something went wrong.')
     } finally {
       setSubmitting(false)
     }
+  }
+
+  function handleReset() {
+    setConfirmation(null)
+    setName('')
+    setAddress('')
+    setEmail('')
+    setPhone('')
+    setMiddleName('')
+    setStartTime('18:00')
+    setEndTime('22:00')
+    setEventType('')
+    setAttendees('')
+    setExemption('none')
+    setDeclaration(false)
+    setNotes('')
+    setSelectedSlot(null)
+    void loadAvailability()
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // ── If booking confirmed, show the success screen ──
+  if (confirmation) {
+    return (
+      <section className="section">
+        <div className="container container--narrow">
+          <BookingSuccess booking={confirmation} onReset={handleReset} />
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -380,7 +536,7 @@ export function Book() {
               <button type="submit" className="btn btn--primary" disabled={submitting}>
                 {submitting ? 'Sending…' : 'Request provisional booking'}
               </button>
-              {submitMessage && <p className="submit-message">{submitMessage}</p>}
+              {submitError && <p className="submit-message submit-message--error">{submitError}</p>}
             </form>
           </>
         )}

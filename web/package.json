@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "start": "vite preview --host --port $PORT"
+    "start": "vite preview --host --port 5173"
   },
   "dependencies": {
     "react": "^19.0.0",

@@ -40,16 +40,18 @@ const smtpPort = Number(process.env.SMTP_PORT) || 587
 const smtpUser = process.env.SMTP_USER
 const smtpPass = process.env.SMTP_PASS
 const smtpConfigured = Boolean(smtpHost && smtpUser && smtpPass)
+import dns from 'dns/promises';
+
+const [ipv4Host] = await dns.resolve4(smtpHost || '');
 
 const transporter = nodemailer.createTransport({
-  host: smtpHost || '',
+  host: ipv4Host,  // pass the resolved IPv4 address directly
   port: smtpPort,
   secure: smtpPort === 465,
   auth: {
     user: smtpUser || '',
     pass: smtpPass || '',
   },
-  family: 4, // Force IPv4 to prevent connection issues on hosts with partial IPv6 configuration
 } as any);
 
 

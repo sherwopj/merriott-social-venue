@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   base: '/',
   build: {
-    outDir: '../docs',
+    outDir: 'dist',
     emptyOutDir: true,
   },
   server: {
@@ -15,6 +15,6 @@ export default defineConfig({
     },
   },
   preview: {
-    port: Number(process.env.PORT) || 4173,
+    port: Number(process.env.PORT) || 5173,
   },
 })

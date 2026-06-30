@@ -49,6 +49,7 @@ const transporter = nodemailer.createTransport({
     user: smtpUser || '',
     pass: smtpPass || '',
   },
+  family: 4, // Force IPv4 to prevent connection issues on hosts with partial IPv6 configuration
 })
 
 

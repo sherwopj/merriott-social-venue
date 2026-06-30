@@ -16,5 +16,6 @@ export default defineConfig({
   },
   preview: {
     port: Number(process.env.PORT) || 5173,
+    allowedHosts: ['merriottsocialvenue.co.uk', 'www.merriottsocialvenue.co.uk'],
   },
 })

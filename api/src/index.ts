@@ -204,8 +204,8 @@ ${notes || 'None'}
     try {
       const recipient = process.env.NOTIFICATION_EMAIL_TO || 'merriottsocialvenue@gmail.com'
       const mailSubject = `Provisional Booking Request: ${name} (Ref: ${reference})`
-      
-      const calendarLinkSection = htmlLink 
+
+      const calendarLinkSection = htmlLink
         ? `<p><strong>Google Calendar Event Link:</strong> <a href="${htmlLink}">${htmlLink}</a></p>`
         : '<p><em>Note: Google Calendar event link could not be generated.</em></p>'
 
@@ -255,6 +255,6 @@ app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' })
 })
 
-app.listen(port, () => {
+app.listen(port, "0.0.0.0", function () {
   console.log(`API listening on http://localhost:${port}`)
 })

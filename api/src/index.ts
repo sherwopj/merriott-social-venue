@@ -50,7 +50,7 @@ const transporter = nodemailer.createTransport({
     pass: smtpPass || '',
   },
   family: 4, // Force IPv4 to prevent connection issues on hosts with partial IPv6 configuration
-})
+} as any);
 
 
 const webOrigins = (process.env.WEB_ORIGIN ?? '')

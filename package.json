@@ -1,7 +1,10 @@
 {
   "name": "merriott-social-venue",
   "private": true,
-  "workspaces": ["web", "api"],
+  "workspaces": [
+    "web",
+    "api"
+  ],
   "scripts": {
     "dev:web": "npm run dev --workspace web",
     "dev:api": "npm run dev --workspace api",
@@ -9,5 +12,8 @@
     "build:api": "npm run build --workspace api",
     "start:web": "npm run start --workspace web",
     "start:api": "npm run start --workspace api"
+  },
+  "dependencies": {
+    "resend": "^6.16.0"
   }
 }

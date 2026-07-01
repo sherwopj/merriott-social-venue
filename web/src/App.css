@@ -875,20 +875,7 @@ code {
   z-index: 2;
 }
 
-.hero-rosette {
-  position: absolute;
-  bottom: 1rem;
-  right: 1rem;
-  z-index: 4;
-  width: clamp(100px, 14vw, 170px);
-  max-width: 180px;
-  transform: rotate(0deg);
-  transition: transform 0.25s ease;
-}
 
-.hero-banner:hover .hero-rosette {
-  transform: rotate(12deg) scale(1.06);
-}
 
 @keyframes scroll {
   0% {

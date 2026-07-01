@@ -1,9 +1,10 @@
 :root {
-  --color-bg: #143642;
-  --color-bg-elevated: #1a4558;
-  --color-accent: #c9a050;
-  --color-text: #f4f1ea;
-  --color-text-muted: #b8c5cc;
+  --color-bg: #133B53;
+  --color-bg-elevated: #18475F;
+  --color-accent: #D7A145;
+  --color-accent-soft: rgba(215, 161, 69, 0.15);
+  --color-text: #F6E6C3;
+  --color-text-muted: #CBD1D5;
   --font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
   --font-sans: 'Montserrat', system-ui, sans-serif;
   --shadow-soft: 0 8px 32px rgba(0, 0, 0, 0.25);
@@ -41,7 +42,7 @@ a {
 }
 
 a:hover {
-  color: #e0bc6a;
+  color: var(--color-accent);
 }
 
 img {

@@ -196,6 +196,7 @@ export function Book() {
   const [attendees, setAttendees] = useState('')
   const [exemption, setExemption] = useState('none')
   const [declaration, setDeclaration] = useState(false)
+  const [sendCopy, setSendCopy] = useState(true)
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -277,6 +278,7 @@ export function Book() {
           attendees: Number(attendees),
           exemption,
           declaration,
+          sendCopyToHirer: sendCopy,
           notes,
         }),
       })
@@ -540,6 +542,10 @@ export function Book() {
                 <label className="checkbox-field">
                   <input type="checkbox" checked={declaration} onChange={(e) => setDeclaration(e.target.checked)} required />
                   <span>I confirm the information is correct and agree to the terms above.</span>
+                </label>
+                <label className="checkbox-field">
+                  <input type="checkbox" checked={sendCopy} onChange={(e) => setSendCopy(e.target.checked)} />
+                  <span>Send me a duplicate provisional booking email</span>
                 </label>
               </div>
 

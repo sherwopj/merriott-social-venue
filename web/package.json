@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "start": "vite preview --host --port 5173"
+    "start": "vite preview --host --port 5173",
+    "dev": "vite --host --port 5173"
   },
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.6.0"
+    "react-router-dom": "^7.6.0",
+    "swiper": "^14.0.1",
+    "yet-another-react-lightbox": "^3.32.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

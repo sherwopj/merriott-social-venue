@@ -104,6 +104,7 @@ app.post('/api/bookings', async (req, res) => {
     exemption,
     declaration,
     notes,
+    sendCopyToHirer,
   } = req.body ?? {}
 
   // Honeypot anti-spam check
@@ -176,9 +177,14 @@ ${notes || 'None'}
         ? `<p><strong>Google Calendar Event Link:</strong> <a href="${htmlLink}">${htmlLink}</a></p>`
         : '<p><em>Note: Google Calendar event link could not be generated.</em></p>'
 
+      const recipients = Array.isArray(recipient) ? [...recipient] : [recipient]
+      if (sendCopyToHirer && email && typeof email === 'string' && !recipients.includes(email)) {
+        recipients.push(email)
+      }
+
       const { error } = await resend.emails.send({
         from: fromAddress,
-        to: recipient,
+        to: recipients,
         subject: `Provisional Booking Request: ${name} (Ref: ${reference})`,
         html: `
           <h2>New Provisional Booking Request</h2>
@@ -208,7 +214,7 @@ ${notes || 'None'}
       if (error) {
         console.error('[booking] Failed to send notification email:', error)
       } else {
-        console.log(`[booking] Notification email sent to ${recipient}`)
+        console.log(`[booking] Notification email sent to ${recipients.join(', ')}`)
       }
     } catch (e) {
       console.error('[booking] Failed to send notification email:', e)

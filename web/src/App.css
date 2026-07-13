@@ -637,12 +637,12 @@
 }
 
 .cal-slot--evening {
-  background: rgba(215, 161, 69, 0.7);
-  color: #000000;
+  background: rgba(78, 110, 165, 0.95);
+  color: #fdfdfd;
 }
 
 .cal-slot--evening:hover:not(:disabled) {
-  background: rgba(215, 161, 69, 0.85);
+  background: rgba(61, 92, 142, 1);
 }
 
 .cal-slot:disabled {
@@ -684,7 +684,8 @@
   }
 
   .cal-legend__box--available-eve {
-    background: rgba(215, 161, 69, 0.6);
+    background: rgba(78, 110, 165, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .cal-legend__box--busy {
@@ -702,6 +703,7 @@
   font-weight: 600;
   font-size: 0.9rem;
   padding: 0.5rem 0.85rem;
+  text-decoration: none;
 }
 
 .btn--ghost {
@@ -721,7 +723,8 @@
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--color-accent);
+  background: rgba(215, 161, 69, 0.9);
+  color: var(--color-bg) !important;
 }
 
 .btn--primary:disabled {

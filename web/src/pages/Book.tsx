@@ -412,7 +412,11 @@ export function Book() {
                           type="button"
                           className={`cal-slot cal-slot--day${isDayBusy ? ' cal-slot--busy' : ''}${daySelected ? ' cal-slot--selected' : ''}`}
                           disabled={isDayBusy || isPast}
-                          onClick={() => setSelectedSlot({ date: c.iso!, type: 'day' })}
+                          onClick={() => {
+                            setSelectedSlot({ date: c.iso!, type: 'day' })
+                            setStartTime('12:00')
+                            setEndTime('18:00')
+                          }}
                           aria-label={`Book Day slot on ${c.iso}`}
                         >
                           Day
@@ -421,7 +425,11 @@ export function Book() {
                           type="button"
                           className={`cal-slot cal-slot--evening${isEveningBusy ? ' cal-slot--busy' : ''}${eveSelected ? ' cal-slot--selected' : ''}`}
                           disabled={isEveningBusy || isPast}
-                          onClick={() => setSelectedSlot({ date: c.iso!, type: 'evening' })}
+                          onClick={() => {
+                            setSelectedSlot({ date: c.iso!, type: 'evening' })
+                            setStartTime('18:00')
+                            setEndTime('22:00')
+                          }}
                           aria-label={`Book Evening slot on ${c.iso}`}
                         >
                           Eve

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Gallery } from '../components/Gallery'
 import banner from '../assets/banner.png'
 
@@ -41,6 +42,8 @@ export function Home() {
             Family and dog friendly.
             <br />
             We are a non profit organisation and are supported by our volunteers. We are always looking for more volunteers, so if you think you could support us, please get in touch!
+            <br />
+            You can view our <Link to="/constitution">constitution</Link> here.
           </p>
         </div>
       </section>

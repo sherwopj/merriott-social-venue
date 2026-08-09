@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import constitutionPdf from '../assets/Merriott_Constitution_v4.pdf'
+import constitutionPdf from '../assets/Merriott_Constitution.pdf'
 
 export function Constitution() {
   return (

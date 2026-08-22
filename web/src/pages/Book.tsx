@@ -1,5 +1,6 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
+import functionRoomHirePdf from '../assets/MSV_Function_Room_Hire_Policy_and_Form.pdf'
 
 type BusySlot = { start: string; end: string }
 
@@ -32,6 +33,25 @@ const EXEMPTION_LABELS: Record<string, string> = {
 }
 
 const EMAIL_ADDRESS = 'merriottsocialvenue@gmail.com'
+
+function InfoTip({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <span className="info-tip">
+      <button
+        type="button"
+        className="info-tip__button"
+        aria-label={label}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        i
+      </button>
+      {open && <span className="info-tip__panel" role="tooltip">{children}</span>}
+    </span>
+  )
+}
 
 function formatDate(iso: string) {
   const d = new Date(iso + 'T12:00:00')
@@ -194,6 +214,7 @@ export function Book() {
   const [endTime, setEndTime] = useState('22:00')
   const [eventType, setEventType] = useState('')
   const [attendees, setAttendees] = useState('')
+  const [barOpenTime, setBarOpenTime] = useState('19:00')
   const [exemption, setExemption] = useState('none')
   const [declaration, setDeclaration] = useState(false)
   const [sendCopy, setSendCopy] = useState(true)
@@ -261,6 +282,10 @@ export function Book() {
     }
     setSubmitting(true)
     try {
+      const requestNotes = [notes, barOpenTime ? `Requested bar opening time: ${barOpenTime}` : '']
+        .filter(Boolean)
+        .join('\n')
+
       const res = await fetch(apiUrl('/api/bookings'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -279,7 +304,8 @@ export function Book() {
           exemption,
           declaration,
           sendCopyToHirer: sendCopy,
-          notes,
+          notes: requestNotes,
+          barOpenTime,
         }),
       })
       const body = (await res.json().catch(() => ({}))) as { ok?: boolean; reference?: string; error?: string }
@@ -321,6 +347,7 @@ export function Book() {
     setEndTime('22:00')
     setEventType('')
     setAttendees('')
+    setBarOpenTime('19:00')
     setExemption('none')
     setDeclaration(false)
     setNotes('')
@@ -348,6 +375,17 @@ export function Book() {
           Choose a date for a <strong>provisional</strong> hold. Our team will contact you to confirm
           details, deposit, and access times.
         </p>
+
+        <div className="booking-policy-links">
+          <a
+            className="btn btn--ghost"
+            href={functionRoomHirePdf}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View hire policy and form PDF
+          </a>
+        </div>
 
         {loading ? (
           <div className="loader-container">
@@ -459,7 +497,13 @@ export function Book() {
               <div className="book-form__section">
                 <h2 className="section-title section-title--small">Booking Details</h2>
                 <label className="field">
-                  <span>Selected Slot</span>
+                  <span>
+                    Selected Slot
+                    <InfoTip label="Session timing details">
+                      Sessions are generally booked in 4-hour blocks. The room is usually hired as a morning,
+                      afternoon or evening session.
+                    </InfoTip>
+                  </span>
                   <input
                     value={selectedSlot ? `${selectedSlot.date} (${selectedSlot.type === 'day' ? 'Day' : 'Evening'})` : ''}
                     readOnly
@@ -477,14 +521,30 @@ export function Book() {
                     <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
                   </label>
                 </div>
-                <p className="field-hint">Note: Bookings are typically in 4-hour blocks.</p>
+                <p className="field-hint">Standard room hire is a 4-hour session, with a £25 hire fee and £30 cleaning deposit payable when booking.</p>
                 <label className="field">
                   <span>Type of Event</span>
                   <input value={eventType} onChange={(e) => setEventType(e.target.value)} required placeholder="e.g. Birthday Party, Meeting" />
                 </label>
                 <label className="field">
-                  <span>Estimated Number of Attendees</span>
+                  <span>
+                    Estimated Number of Adults
+                    <InfoTip label="Adult attendance and fee refund">
+                      For large evening events, the fee may be refunded after the event if confirmed adult attendance
+                      reaches 15+ and the bar is open, as set out in the hire policy.
+                    </InfoTip>
+                  </span>
                   <input type="number" value={attendees} onChange={(e) => setAttendees(e.target.value)} required min="1" />
+                </label>
+                <label className="field">
+                  <span>
+                    Requested Bar Opening Time
+                    <InfoTip label="Bar opening charges">
+                      Bar staffing is charged at £15 per hour, or part hour, for any time outside the venue’s normal bar
+                      opening hours. This is payable upfront along with the hire fee and deposit.
+                    </InfoTip>
+                  </span>
+                  <input type="time" value={barOpenTime} onChange={(e) => setBarOpenTime(e.target.value)} />
                 </label>
               </div>
 
@@ -525,14 +585,21 @@ export function Book() {
               <div className="book-form__section">
                 <h2 className="section-title section-title--small">Exemptions & Notes</h2>
                 <div className="field">
-                  <span>Hire Charge Exemption</span>
+                  <span>
+                    Hire Charge Status
+                    <InfoTip label="Hire charge policy">
+                      Standard hire is £25. Wakes and registered charity events are fee-free. Large evening events with
+                      the bar open may be eligible for a refund of the £25 fee after the event if confirmed adult
+                      attendance is 15+.
+                    </InfoTip>
+                  </span>
                   <select value={exemption} onChange={(e) => setExemption(e.target.value)}>
-                    <option value="none">None - Regular Hire (£25)</option>
-                    <option value="adult_evening">Adult evening event (30+ bar users)</option>
-                    <option value="funeral">Funeral / Wake</option>
-                    <option value="charity">Charity Event</option>
+                    <option value="none">None – Standard hire (£25)</option>
+                    <option value="large_evening">Large evening event (15+ adults, bar open)</option>
+                    <option value="funeral">Funeral / wake</option>
+                    <option value="charity">Registered charity event</option>
                   </select>
-                  <p className="field-hint">Cleaning deposit (£30) is required in all cases.</p>
+                  <p className="field-hint">The £30 cleaning deposit still applies in all cases, and committee discretion can waive it in exceptional circumstances.</p>
                 </div>
                 <label className="field">
                   <span>Additional Notes</span>
@@ -543,9 +610,11 @@ export function Book() {
               <div className="book-form__section book-form__section--terms">
                 <h2 className="section-title section-title--small">Terms & Declaration</h2>
                 <ul className="terms-list">
-                  <li>A £30 cleaning deposit is required and will be refunded if the room is left clean and tidy.</li>
-                  <li>The hirer is responsible for all attendees and their behaviour.</li>
-                  <li>Any damage may result in loss of deposit and additional charges.</li>
+                  <li>£25 room hire fee and a £30 cleaning deposit are payable when booking. The deposit is refundable if the room and kitchen are left clean, tidy, and undamaged.</li>
+                  <li>Wakes and registered charity events are fee-free; large adult evening events with the bar open may be eligible for a fee refund after the event if attendance is 15+.</li>
+                  <li>The hirer is responsible for guests’ conduct, room capacity, and keeping exits clear at all times.</li>
+                  <li>No outside alcohol, no smoking indoors, no candles, confetti, or fireworks without prior committee agreement, and nothing may be stuck, taped, or pinned to the walls.</li>
+                  <li>Furniture must be returned to its normal layout by the end of the session, and the cleaning deposit covers both the function room and kitchen.</li>
                 </ul>
                 <label className="checkbox-field">
                   <input type="checkbox" checked={declaration} onChange={(e) => setDeclaration(e.target.checked)} required />

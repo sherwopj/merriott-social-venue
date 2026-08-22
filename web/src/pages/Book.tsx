@@ -83,8 +83,8 @@ function daysInMonth(year: number, monthIndex: number) {
 }
 
 function getDayStatus(dayStr: string, busy: BusySlot[]) {
-  const dayStart = new Date(`${dayStr}T00:00:00.000Z`).getTime()
-  const splitPoint = dayStart + 18 * 60 * 60 * 1000 // 6pm
+  const dayStart = new Date(`${dayStr}T00:00:00`).getTime()
+  const splitPoint = dayStart + 18 * 60 * 60 * 1000 // 6pm local time
   const dayEnd = dayStart + 24 * 60 * 60 * 1000
 
   let isDayBusy = false

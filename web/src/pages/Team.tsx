@@ -77,8 +77,8 @@ function parseTeamMember(key: string, imgUrl: string): TeamMember {
       if (cleaned === 'barStaff') {
         return 'Bar Staff'
       }
-      if (cleaned.toLowerCase() === 'fundraising volunteercoordinator') {
-        return 'Fundraising & Volunteer Coordinator'
+      if (cleaned.toLowerCase() === 'eventscoordinator') {
+        return 'Events Coordinator'
       }
 
       // Convert camelCase to Space Case

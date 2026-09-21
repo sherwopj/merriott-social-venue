@@ -165,6 +165,13 @@ function parseYesNo(raw: string | undefined): boolean {
   return /^y(es)?$/i.test((raw ?? '').trim())
 }
 
+function addDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -325,6 +332,22 @@ app.post(
 
     upcomingEventsCache.fetchedAt = 0 // force the next GET to pick this up immediately
     console.info(`[upcoming-events] Event "${title}" added by ${editorEmail}`)
+
+    if (calendar && calendarId) {
+      try {
+        await calendar.events.insert({
+          calendarId,
+          requestBody: {
+            summary: String(title).trim(),
+            description: `${String(description).trim()}\n\nCategory: ${categoryInfo.kicker}\nAdded via website by ${editorEmail}`,
+            start: { date: parsedStartDate },
+            end: { date: addDays(parsedEndDate || parsedStartDate, 1) },
+          },
+        })
+      } catch (e) {
+        console.error(`[upcoming-events] Failed to create calendar event for "${title}":`, e)
+      }
+    }
 
     res.status(201).json({
       event: {

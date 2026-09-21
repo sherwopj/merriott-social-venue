@@ -216,7 +216,8 @@ export function Book() {
   const [endTime, setEndTime] = useState('22:00')
   const [eventType, setEventType] = useState('')
   const [attendees, setAttendees] = useState('')
-  const [barOpenTime, setBarOpenTime] = useState('19:00')
+  const [barNeeded, setBarNeeded] = useState(false)
+  const [barOpenTime, setBarOpenTime] = useState('')
   const [exemption, setExemption] = useState('none')
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'in_person'>('online')
   const [declaration, setDeclaration] = useState(false)
@@ -268,10 +269,18 @@ export function Book() {
     return { start: toISODate(start), end: toISODate(end) }
   }, [cursor])
 
+  const feeExempt = exemption === 'funeral' || exemption === 'charity'
+
+  const barSurchargeHours = useMemo(() => {
+    if (!barNeeded || !barOpenTime) return 0
+    const [h, m] = barOpenTime.split(':').map(Number)
+    const diffMinutes = 19 * 60 - (h * 60 + m)
+    return diffMinutes > 0 ? Math.ceil(diffMinutes / 60) : 0
+  }, [barNeeded, barOpenTime])
+
   const amountDue = useMemo(() => {
-    const feeExempt = exemption === 'funeral' || exemption === 'charity'
-    return (feeExempt ? 0 : 25) + 30
-  }, [exemption])
+    return (feeExempt ? 0 : 25) + 30 + barSurchargeHours * 15
+  }, [feeExempt, barSurchargeHours])
 
   const loadAvailability = useCallback(async () => {
     setLoading(true)
@@ -336,10 +345,6 @@ export function Book() {
     }
     setSubmitting(true)
     try {
-      const requestNotes = [notes, barOpenTime ? `Requested bar opening time: ${barOpenTime}` : '']
-        .filter(Boolean)
-        .join('\n')
-
       const res = await fetch(apiUrl('/api/bookings'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -359,8 +364,8 @@ export function Book() {
           paymentMethod,
           declaration,
           sendCopyToHirer: sendCopy,
-          notes: requestNotes,
-          barOpenTime,
+          notes,
+          barOpenTime: barNeeded ? barOpenTime : '',
         }),
       })
       const body = (await res.json().catch(() => ({}))) as { ok?: boolean; url?: string; reference?: string; error?: string }
@@ -607,16 +612,43 @@ export function Book() {
                   </span>
                   <input type="number" value={attendees} onChange={(e) => setAttendees(e.target.value)} required min="1" />
                 </label>
-                <label className="field">
+                <div className="field">
                   <span>
-                    Requested Bar Opening Time
+                    Bar Opening
                     <InfoTip label="Bar opening charges">
-                      Bar staffing is charged at £15 per hour, or part hour, for any time outside the venue’s normal bar
-                      opening hours. This is payable upfront along with the hire fee and deposit.
+                      The bar normally opens at 7pm. If you need it open earlier, that's charged at £15 per hour (or
+                      part hour) before 7pm, payable upfront along with the hire fee and deposit.
                     </InfoTip>
                   </span>
-                  <input type="time" value={barOpenTime} onChange={(e) => setBarOpenTime(e.target.value)} />
-                </label>
+                  <label className="checkbox-field">
+                    <input
+                      type="checkbox"
+                      checked={barNeeded}
+                      onChange={(e) => {
+                        setBarNeeded(e.target.checked)
+                        if (!e.target.checked) setBarOpenTime('')
+                        else if (!barOpenTime) setBarOpenTime('19:00')
+                      }}
+                    />
+                    <span>I need the bar open before 7pm</span>
+                  </label>
+                  {barNeeded && (
+                    <>
+                      <input
+                        type="time"
+                        value={barOpenTime}
+                        onChange={(e) => setBarOpenTime(e.target.value)}
+                        aria-label="Requested bar opening time"
+                      />
+                      {barSurchargeHours > 0 && (
+                        <p className="field-hint">
+                          {barSurchargeHours} hour{barSurchargeHours === 1 ? '' : 's'} before the normal 7pm opening
+                          — £{(barSurchargeHours * 15).toFixed(2)} bar surcharge added below.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="book-form__section">
@@ -682,7 +714,8 @@ export function Book() {
                 <h2 className="section-title section-title--small">Payment</h2>
                 <p className="field-hint">
                   Amount due now: <strong>£{amountDue.toFixed(2)}</strong>
-                  {' '}({exemption === 'funeral' || exemption === 'charity' ? 'fee waived, ' : '£25 hire fee + '}£30 cleaning deposit)
+                  {' '}({feeExempt ? 'fee waived, ' : '£25 hire fee + '}£30 cleaning deposit
+                  {barSurchargeHours > 0 ? ` + £${(barSurchargeHours * 15).toFixed(2)} bar surcharge` : ''})
                 </p>
                 <div className="field">
                   <span>How will you pay?</span>

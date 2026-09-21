@@ -720,16 +720,59 @@ type BookingFields = {
   exemption?: string
   notes?: string
   sendCopyToHirer?: boolean
+  barOpenTime?: string
 }
+
+const BAR_NORMAL_OPEN_MINUTES = 19 * 60 // the bar normally opens at 7pm
 
 function formatPounds(pence: number): string {
   return `£${(pence / 100).toFixed(2)}`
 }
 
-function paymentStatusLine(paymentMethod: 'online' | 'in_person', amountDue: number): string {
+// Hours (rounded up) between a requested earlier bar-opening time and the normal 7pm
+// opening — 0 if no time was requested, or the requested time isn't actually earlier.
+function computeBarSurchargeHours(barOpenTime: string | undefined): number {
+  if (!barOpenTime || !/^\d{1,2}:\d{2}$/.test(barOpenTime)) return 0
+  const [h, m] = barOpenTime.split(':').map(Number)
+  const diffMinutes = BAR_NORMAL_OPEN_MINUTES - (h * 60 + m)
+  return diffMinutes > 0 ? Math.ceil(diffMinutes / 60) : 0
+}
+
+function computeAmountDue(exemption: string | undefined, barOpenTime: string | undefined) {
+  const feeExempt = exemption === 'funeral' || exemption === 'charity'
+  const feeAmount = feeExempt ? 0 : 2500
+  const depositAmount = 3000
+  const barSurchargeHours = computeBarSurchargeHours(barOpenTime)
+  const barSurchargeAmount = barSurchargeHours * 1500
+  return {
+    feeExempt,
+    feeAmount,
+    depositAmount,
+    barSurchargeHours,
+    barSurchargeAmount,
+    total: feeAmount + depositAmount + barSurchargeAmount,
+  }
+}
+
+function formatAmountBreakdown(amounts: ReturnType<typeof computeAmountDue>, barOpenTime: string | undefined): string[] {
+  const lines = [
+    `Hire fee: ${amounts.feeExempt ? 'Waived' : formatPounds(amounts.feeAmount)}`,
+    `Cleaning deposit: ${formatPounds(amounts.depositAmount)}`,
+  ]
+  if (amounts.barSurchargeAmount > 0) {
+    const hourWord = amounts.barSurchargeHours === 1 ? 'hour' : 'hours'
+    lines.push(
+      `Bar opening surcharge: ${formatPounds(amounts.barSurchargeAmount)} (requested ${barOpenTime}, ${amounts.barSurchargeHours} ${hourWord} before the normal 7pm opening)`,
+    )
+  }
+  lines.push(`Total: ${formatPounds(amounts.total)}`)
+  return lines
+}
+
+function paymentStatusLine(paymentMethod: 'online' | 'in_person', total: number): string {
   return paymentMethod === 'online'
-    ? `${formatPounds(amountDue)} received online via card (Stripe).`
-    : `${formatPounds(amountDue)} still owing — to be paid in person at the venue.`
+    ? `${formatPounds(total)} received online via card (Stripe).`
+    : `${formatPounds(total)} still owing — to be paid in person at the venue.`
 }
 
 // Shared by the in-person path (called directly) and the Stripe webhook (called once payment
@@ -738,14 +781,16 @@ async function createBookingRecord(
   fields: BookingFields,
   reference: string,
   paymentMethod: 'online' | 'in_person',
-  amountDue: number,
 ): Promise<void> {
-  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, sendCopyToHirer } = fields
-  const paymentLine = paymentStatusLine(paymentMethod, amountDue)
+  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, sendCopyToHirer, barOpenTime } = fields
+  const amounts = computeAmountDue(exemption, barOpenTime)
+  const breakdownLines = formatAmountBreakdown(amounts, barOpenTime)
+  const paymentLine = paymentStatusLine(paymentMethod, amounts.total)
 
   console.info('[booking]', {
     reference, name, email, phone, address, date,
-    startTime, endTime, eventType, attendees, exemption, notes, paymentMethod, amountDue,
+    startTime, endTime, eventType, attendees, exemption, notes, barOpenTime, paymentMethod,
+    amountDue: amounts.total,
   })
 
   let htmlLink = ''
@@ -756,6 +801,7 @@ async function createBookingRecord(
 Reference: ${reference}
 
 Payment: ${paymentLine}
+${breakdownLines.map((line) => `  - ${line}`).join('\n')}
 
 Hirer Details:
 - Name: ${name}
@@ -815,6 +861,9 @@ ${notes || 'None'}
           <p>A new request has been submitted with reference <strong>${reference}</strong>.</p>
 
           <p><strong>Payment:</strong> ${paymentLine}</p>
+          <ul>
+            ${breakdownLines.map((line) => `<li>${line}</li>`).join('\n            ')}
+          </ul>
 
           <h3>Booking Details:</h3>
           <ul>
@@ -868,6 +917,7 @@ app.post('/api/bookings', async (req, res) => {
     notes,
     sendCopyToHirer,
     paymentMethod,
+    barOpenTime,
   } = req.body ?? {}
 
   // Honeypot anti-spam check
@@ -888,16 +938,15 @@ app.post('/api/bookings', async (req, res) => {
     return
   }
 
-  const feeExempt = exemption === 'funeral' || exemption === 'charity'
-  const amountDue = (feeExempt ? 0 : 2500) + 3000 // pence: £25 hire fee (waived) + £30 deposit
   const reference = `MSV-${Date.now().toString(36).toUpperCase()}`
   const fields: BookingFields = {
     name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes,
     sendCopyToHirer: Boolean(sendCopyToHirer),
+    barOpenTime: barOpenTime || undefined,
   }
 
   if (paymentMethod === 'in_person') {
-    await createBookingRecord(fields, reference, 'in_person', amountDue)
+    await createBookingRecord(fields, reference, 'in_person')
     res.json({ ok: true, reference })
     return
   }
@@ -907,6 +956,8 @@ app.post('/api/bookings', async (req, res) => {
     return
   }
 
+  const amounts = computeAmountDue(exemption, barOpenTime)
+
   try {
     const siteOrigin = webOrigins[0] || 'https://merriottsocialvenue.co.uk'
     const session = await stripe.checkout.sessions.create({
@@ -915,7 +966,7 @@ app.post('/api/bookings', async (req, res) => {
       line_items: [{
         price_data: {
           currency: 'gbp',
-          unit_amount: amountDue,
+          unit_amount: amounts.total,
           product_data: {
             name: 'Merriott Social Venue — Function Room Hire Fee & Cleaning Deposit',
             description: `${date} — ${eventType || 'Function room hire'} (Ref: ${reference})`,
@@ -928,7 +979,7 @@ app.post('/api/bookings', async (req, res) => {
       cancel_url: `${siteOrigin}/book`,
       metadata: {
         reference,
-        amountDue: String(amountDue),
+        amountDue: String(amounts.total),
         name,
         email,
         phone,
@@ -942,6 +993,7 @@ app.post('/api/bookings', async (req, res) => {
         exemption: exemption || 'none',
         notes: String(notes || '').slice(0, 450),
         sendCopyToHirer: sendCopyToHirer ? 'yes' : 'no',
+        barOpenTime: barOpenTime || '',
       },
     })
     res.json({ ok: true, url: session.url })
@@ -1007,9 +1059,9 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         exemption: metadata.exemption,
         notes: metadata.notes,
         sendCopyToHirer: metadata.sendCopyToHirer === 'yes',
+        barOpenTime: metadata.barOpenTime || undefined,
       }
-      const amountDue = Number(metadata.amountDue) || 0
-      await createBookingRecord(fields, metadata.reference ?? session.id, 'online', amountDue)
+      await createBookingRecord(fields, metadata.reference ?? session.id, 'online')
       console.info(`[bookings] Booking ${metadata.reference} created from paid Stripe session ${session.id}`)
     }
   }

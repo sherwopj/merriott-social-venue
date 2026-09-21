@@ -305,9 +305,12 @@ app.post(
     }
 
     try {
+      // Deliberately not sheetRange here: append's "find the last row" search is scoped to
+      // whatever range you give it, so a narrow configured read-range would otherwise anchor
+      // every append to that same window and overwrite instead of adding a new row.
       await sheets.spreadsheets.values.append({
         spreadsheetId: sheetId,
-        range: sheetRange,
+        range: 'A:J',
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[

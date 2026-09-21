@@ -76,21 +76,30 @@ export function Events() {
 
             <ul className="upcoming-events">
               {sortedUpcoming.map((ev) => {
+                const image = ev.image
                 return (
                   <li key={ev.id} className="upcoming-event">
-                    <div className="upcoming-event__media">
-                      {ev.image ? (
-                        <img src={ev.image} alt={ev.title} loading="lazy" decoding="async" />
-                      ) : (
+                    {image ? (
+                      <button
+                        className="events-card__media-btn"
+                        onClick={() => setSelectedImage(image)}
+                        aria-label={`View full size image for ${ev.title}`}
+                      >
+                        <div className="upcoming-event__media">
+                          <img src={image} alt={ev.title} loading="lazy" decoding="async" />
+                          <div className="events-card__zoom-hint">Click to enlarge</div>
+                        </div>
+                      </button>
+                    ) : (
+                      <div className="upcoming-event__media">
                         <EventIcon name={ev.icon} />
-                      )}
-                    </div>
+                      </div>
+                    )}
                     <div className="upcoming-event__body">
-                      <p className="upcoming-event__kicker">{ev.kicker}</p>
-                      <h3 className="upcoming-event__title">{ev.title}</h3>
                       <p className="upcoming-event__full-date">
                         <time dateTime={ev.startDate}>{formatLongDate(ev.startDate, ev.endDate)}</time>
                       </p>
+                      <h3 className="upcoming-event__title">{ev.title}</h3>
                       <p className="upcoming-event__description">{ev.description}</p>
                       {(ev.ticketed || ev.tbc) && (
                         <p className={`event-pill ${ev.ticketed ? 'event-pill--ticketed' : 'event-pill--tbc'}`}>

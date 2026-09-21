@@ -1505,25 +1505,17 @@ code {
   gap: 1rem;
 }
 
-.upcoming-event__kicker {
-  margin: 0 0 0.15rem;
-  font-size: 0.75rem;
+.upcoming-event__full-date {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-serif);
+  font-size: clamp(1.15rem, 2.2vw, 1.5rem);
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--color-accent);
 }
 
 .upcoming-event__title {
   margin: 0 0 0.3rem;
   font-size: 1.15rem;
-}
-
-.upcoming-event__full-date {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-accent);
 }
 
 .upcoming-event__description {

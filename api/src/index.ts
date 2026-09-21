@@ -14,8 +14,13 @@ const calendarId = process.env.GOOGLE_CALENDAR_ID
 const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 const calendarConfigured = Boolean(calendarId && serviceAccountJson)
 
+const sheetId = process.env.GOOGLE_SHEET_ID
+const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:J1000'
+const sheetConfigured = Boolean(sheetId && serviceAccountJson)
+
 let calendar: any = null
-if (calendarConfigured) {
+let sheets: any = null
+if (calendarConfigured || sheetConfigured) {
   try {
     let credentials: any = null
     const jsonStr = serviceAccountJson!.trim()
@@ -26,11 +31,15 @@ if (calendarConfigured) {
     }
     const auth = new google.auth.GoogleAuth({
       credentials,
-      scopes: ['https://www.googleapis.com/auth/calendar'],
+      scopes: [
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/spreadsheets.readonly',
+      ],
     })
     calendar = google.calendar({ version: 'v3', auth })
+    sheets = google.sheets({ version: 'v4', auth })
   } catch (e) {
-    console.error('Failed to initialize Google Calendar:', e)
+    console.error('Failed to initialize Google API client:', e)
   }
 }
 
@@ -54,6 +63,133 @@ app.use(express.json({ limit: '32kb' }))
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true })
+})
+
+// ---- Upcoming events (Google Sheet, fed by a Form) ----
+
+type IconName =
+  | 'handsHeart'
+  | 'discoBall'
+  | 'starMic'
+  | 'vinylRecord'
+  | 'guitarBand'
+  | 'bbqFlag'
+  | 'santaHat'
+  | 'feathers'
+
+type UpcomingEvent = {
+  id: string
+  startDate: string
+  endDate?: string
+  title: string
+  description: string
+  kicker: string
+  icon: IconName
+  image?: string
+  ticketed?: boolean
+  tbc?: boolean
+}
+
+// Keyed by the Form's "Category" dropdown option (case-insensitive).
+const CATEGORY_MAP: Record<string, { icon: IconName; kicker: string }> = {
+  'disco night': { icon: 'discoBall', kicker: 'Disco Night' },
+  'tribute show': { icon: 'starMic', kicker: 'Tribute Show' },
+  'dj night': { icon: 'vinylRecord', kicker: 'DJ Night' },
+  'live band': { icon: 'guitarBand', kicker: 'Live Band' },
+  'bbq / street party': { icon: 'bbqFlag', kicker: 'Celebration' },
+  'christmas / winter': { icon: 'santaHat', kicker: 'Celebration' },
+  'cabaret show': { icon: 'feathers', kicker: 'Cabaret Show' },
+  'community / volunteering': { icon: 'handsHeart', kicker: 'Community' },
+}
+const DEFAULT_CATEGORY = { icon: 'discoBall' as IconName, kicker: 'Special Event' }
+
+function parseSheetDate(raw: string | undefined): string | null {
+  const s = (raw ?? '').trim()
+  if (!s) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  const uk = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (uk) {
+    const [, d, m, y] = uk
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+  return null
+}
+
+function parseYesNo(raw: string | undefined): boolean {
+  return /^y(es)?$/i.test((raw ?? '').trim())
+}
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
+  const events: UpcomingEvent[] = []
+  rows.forEach((row, index) => {
+    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, , photoDirectUrl] = row
+    if (!title || !title.trim()) return
+
+    const startDate = parseSheetDate(rawStart)
+    if (!startDate) {
+      console.warn(`[upcoming-events] Skipping row ${index + 2}: unparseable or missing date`)
+      return
+    }
+
+    const endDate = parseSheetDate(rawEnd) ?? undefined
+    const categoryInfo = CATEGORY_MAP[(category ?? '').trim().toLowerCase()] ?? DEFAULT_CATEGORY
+    if (category && !CATEGORY_MAP[category.trim().toLowerCase()]) {
+      console.warn(`[upcoming-events] Row ${index + 2}: unrecognized category "${category}", using default`)
+    }
+
+    events.push({
+      id: `${startDate}-${slugify(title)}`,
+      startDate,
+      endDate,
+      title: title.trim(),
+      description: (description ?? '').trim(),
+      kicker: categoryInfo.kicker,
+      icon: categoryInfo.icon,
+      image: photoDirectUrl && photoDirectUrl.trim() ? photoDirectUrl.trim() : undefined,
+      ticketed: parseYesNo(ticketed) || undefined,
+      tbc: parseYesNo(tbc) || undefined,
+    })
+  })
+  return events
+}
+
+const UPCOMING_EVENTS_CACHE_TTL_MS = 5 * 60 * 1000
+let upcomingEventsCache: { events: UpcomingEvent[]; fetchedAt: number } = { events: [], fetchedAt: 0 }
+
+async function getUpcomingEvents(): Promise<UpcomingEvent[]> {
+  const isFresh = Date.now() - upcomingEventsCache.fetchedAt < UPCOMING_EVENTS_CACHE_TTL_MS
+  if (isFresh) return upcomingEventsCache.events
+
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: sheetRange,
+    })
+    const rows: string[][] = response.data.values || []
+    const events = parseUpcomingEventsRows(rows)
+    upcomingEventsCache = { events, fetchedAt: Date.now() }
+    return events
+  } catch (error) {
+    console.error('[upcoming-events] Failed to fetch sheet, serving last-known list:', error)
+    return upcomingEventsCache.events
+  }
+}
+
+app.get('/api/upcoming-events', async (_req, res) => {
+  if (!sheets || !sheetConfigured) {
+    res.json({ sheetConfigured: false, events: [] })
+    return
+  }
+
+  const events = await getUpcomingEvents()
+  res.json({ sheetConfigured: true, events })
 })
 
 app.get('/api/calendar/availability', async (req, res) => {

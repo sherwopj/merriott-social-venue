@@ -1,61 +1,175 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { weekdayOrder, weekdayLabels, weeklyEvents } from '../data/weeklyEvents'
+import { upcomingEvents as fallbackUpcomingEvents, type UpcomingEvent } from '../data/upcomingEvents'
+import { EventIcon } from '../components/EventIcon'
+import { apiUrl } from '../lib/apiBase'
+
+type UpcomingEventsResponse = {
+  sheetConfigured: boolean
+  events: UpcomingEvent[]
+}
+
+const MONTH_ABBR = [
+  'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+  'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
+]
+
+function formatDateChip(startDate: string, endDate?: string) {
+  const start = new Date(`${startDate}T00:00:00`)
+  const startDay = start.getDate()
+  const month = MONTH_ABBR[start.getMonth()]
+
+  if (endDate) {
+    const end = new Date(`${endDate}T00:00:00`)
+    return { day: `${startDay}–${end.getDate()}`, month }
+  }
+
+  return { day: String(startDay), month }
+}
+
+function formatLongDate(startDate: string, endDate?: string) {
+  const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric' }
+  const start = new Date(`${startDate}T00:00:00`)
+  const startLabel = start.toLocaleDateString('en-GB', options)
+
+  if (endDate) {
+    const end = new Date(`${endDate}T00:00:00`)
+    return `${start.getDate()}–${end.toLocaleDateString('en-GB', options)}`
+  }
+
+  return startLabel
+}
 
 export function Events() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  // Show the bundled list immediately; silently upgrade to the live Google Sheet data
+  // (fed by committee members via a Form) if/when it's reachable. If it isn't — API
+  // asleep, sheet not set up yet, network hiccup — this bundled list stays on screen.
+  const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>(fallbackUpcomingEvents)
+
+  useEffect(() => {
+    let cancelled = false
+
+    fetch(apiUrl('/api/upcoming-events'))
+      .then((res) => (res.ok ? (res.json() as Promise<UpcomingEventsResponse>) : null))
+      .then((data) => {
+        if (!cancelled && data?.sheetConfigured && data.events.length > 0) {
+          setUpcomingEvents(data.events)
+        }
+      })
+      .catch(() => {
+        // Network/API error — keep showing the bundled fallback list.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const sortedUpcoming = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    return upcomingEvents
+      .filter((ev) => new Date(`${ev.endDate ?? ev.startDate}T23:59:59`) >= today)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))
+  }, [upcomingEvents])
 
   return (
     <section className="section">
-      <div className="container">
-        <h1 className="page-title">Weekly events</h1>
+      <div className="container container--wide">
+        <h1 className="page-title">Events</h1>
         <p className="lede">
-          Regular happenings through the week. Times can vary — check at the bar or on our notices
-          for the latest.
+          Regular weekly happenings plus our upcoming calendar of discos, live music and special
+          nights. Times can vary — check at the bar or on our notices for the latest.
         </p>
-        <ul className="events-week">
-          {weekdayOrder.map((day) => {
-            const events = weeklyEvents[day]
-            return (
-              <li key={day} className="events-day">
-                <h2 className="events-day__label">{weekdayLabels[day]}</h2>
-                {events && events.length > 0 ? (
-                  <div className="events-day__grid">
-                    {events.map((ev, idx) => (
-                      <article key={`${day}-${idx}`} className="events-card">
-                        <button
-                          className="events-card__media-btn"
-                          onClick={() => setSelectedImage(ev.image)}
-                          aria-label={`View full size image for ${ev.title}`}
-                        >
-                          <div className="events-card__media">
-                            <img src={ev.image} alt={ev.title} loading="lazy" decoding="async" />
-                            <div className="events-card__zoom-hint">Click to enlarge</div>
-                          </div>
-                        </button>
-                        <div className="events-card__body">
-                          <button
-                            className="events-card__title-btn"
-                            onClick={() => setSelectedImage(ev.image)}
-                          >
-                            <h3>{ev.title}</h3>
-                          </button>
-                          <p>{ev.description}</p>
-                          {ev.note && (
-                            <p className="events-card__note">
-                              <strong>Note:</strong> {ev.note}
-                            </p>
-                          )}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="muted events-day__empty">No regular event — see notices for specials.</p>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+
+        <div className="events-columns">
+          <div className="events-column events-column--upcoming">
+            <h2 className="section-title">Upcoming events</h2>
+            <ul className="upcoming-events">
+              {sortedUpcoming.map((ev) => {
+                const chip = formatDateChip(ev.startDate, ev.endDate)
+                return (
+                  <li key={ev.id} className="upcoming-event">
+                    <div className="upcoming-event__date" aria-hidden="true">
+                      <span className="upcoming-event__date-day">{chip.day}</span>
+                      <span className="upcoming-event__date-month">{chip.month}</span>
+                    </div>
+                    <div className="upcoming-event__media">
+                      {ev.image ? (
+                        <img src={ev.image} alt={ev.title} loading="lazy" decoding="async" />
+                      ) : (
+                        <EventIcon name={ev.icon} />
+                      )}
+                    </div>
+                    <div className="upcoming-event__body">
+                      <p className="upcoming-event__kicker">{ev.kicker}</p>
+                      <h3 className="upcoming-event__title">{ev.title}</h3>
+                      <p className="upcoming-event__description">{ev.description}</p>
+                      <p className="upcoming-event__full-date">
+                        <time dateTime={ev.startDate}>{formatLongDate(ev.startDate, ev.endDate)}</time>
+                      </p>
+                      {(ev.ticketed || ev.tbc) && (
+                        <p className={`event-pill ${ev.ticketed ? 'event-pill--ticketed' : 'event-pill--tbc'}`}>
+                          {ev.ticketed ? 'Tickets required' : 'Details to be confirmed'}
+                        </p>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+
+          <div className="events-column events-column--weekly">
+            <h2 className="section-title">This week, every week</h2>
+            <ul className="events-week">
+              {weekdayOrder.map((day) => {
+                const events = weeklyEvents[day]
+                return (
+                  <li key={day} className="events-day">
+                    <h3 className="events-day__label">{weekdayLabels[day]}</h3>
+                    {events && events.length > 0 ? (
+                      <div className="events-day__grid">
+                        {events.map((ev, idx) => (
+                          <article key={`${day}-${idx}`} className="events-card">
+                            <button
+                              className="events-card__media-btn"
+                              onClick={() => setSelectedImage(ev.image)}
+                              aria-label={`View full size image for ${ev.title}`}
+                            >
+                              <div className="events-card__media">
+                                <img src={ev.image} alt={ev.title} loading="lazy" decoding="async" />
+                                <div className="events-card__zoom-hint">Click to enlarge</div>
+                              </div>
+                            </button>
+                            <div className="events-card__body">
+                              <button
+                                className="events-card__title-btn"
+                                onClick={() => setSelectedImage(ev.image)}
+                              >
+                                <h4>{ev.title}</h4>
+                              </button>
+                              <p>{ev.description}</p>
+                              {ev.note && (
+                                <p className="events-card__note">
+                                  <strong>Note:</strong> {ev.note}
+                                </p>
+                              )}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="muted events-day__empty">No regular event — see notices for specials.</p>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </div>
       </div>
 
       {selectedImage && (

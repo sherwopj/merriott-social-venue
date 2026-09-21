@@ -20,8 +20,7 @@ export function Layout() {
               Home
             </NavLink>
             <NavLink to="/events" className={navLinkClass}>
-              <span className="nav-text-desktop">Weekly events</span>
-              <span className="nav-text-mobile">Events</span>
+              Events
             </NavLink>
             <NavLink to="/team" className={navLinkClass}>
               <span className="nav-text-desktop">Meet the team</span>

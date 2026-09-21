@@ -216,18 +216,60 @@ export function Book() {
   const [attendees, setAttendees] = useState('')
   const [barOpenTime, setBarOpenTime] = useState('19:00')
   const [exemption, setExemption] = useState('none')
+  const [paymentMethod, setPaymentMethod] = useState<'online' | 'in_person'>('online')
   const [declaration, setDeclaration] = useState(false)
   const [sendCopy, setSendCopy] = useState(true)
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null)
+  const [checkingPayment, setCheckingPayment] = useState(false)
+
+  // After a redirect back from Stripe Checkout, look up what was paid and show the same
+  // confirmation screen the in-person path shows immediately.
+  useEffect(() => {
+    const sessionId = new URLSearchParams(window.location.search).get('session_id')
+    if (!sessionId) return
+
+    setCheckingPayment(true)
+    fetch(apiUrl(`/api/bookings/checkout-session/${sessionId}`))
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Request failed (${res.status})`))))
+      .then((data) => {
+        const booking = data.booking ?? {}
+        setConfirmation({
+          reference: booking.reference || 'MSV-PENDING',
+          name: booking.name || '',
+          email: booking.email || '',
+          phone: booking.phone || '',
+          address: booking.address || '',
+          date: booking.date || '',
+          slotType: booking.slotType === 'day' ? 'day' : 'evening',
+          startTime: booking.startTime || '',
+          endTime: booking.endTime || '',
+          eventType: booking.eventType || '',
+          attendees: booking.attendees || '',
+          exemption: booking.exemption || 'none',
+          notes: booking.notes || '',
+        })
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      })
+      .catch((err) => setSubmitError(err instanceof Error ? err.message : 'Could not confirm your payment.'))
+      .finally(() => {
+        setCheckingPayment(false)
+        window.history.replaceState({}, '', window.location.pathname)
+      })
+  }, [])
 
   const range = useMemo(() => {
     const start = startOfMonth(cursor)
     const end = addMonths(start, 1)
     return { start: toISODate(start), end: toISODate(end) }
   }, [cursor])
+
+  const amountDue = useMemo(() => {
+    const feeExempt = exemption === 'funeral' || exemption === 'charity'
+    return (feeExempt ? 0 : 25) + 30
+  }, [exemption])
 
   const loadAvailability = useCallback(async () => {
     setLoading(true)
@@ -302,14 +344,23 @@ export function Book() {
           eventType,
           attendees: Number(attendees),
           exemption,
+          paymentMethod,
           declaration,
           sendCopyToHirer: sendCopy,
           notes: requestNotes,
           barOpenTime,
         }),
       })
-      const body = (await res.json().catch(() => ({}))) as { ok?: boolean; reference?: string; error?: string }
+      const body = (await res.json().catch(() => ({}))) as { ok?: boolean; url?: string; reference?: string; error?: string }
       if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`)
+
+      if (body.url) {
+        // Pay-online path: hand off to Stripe Checkout. The confirmation screen is shown
+        // when the hirer is redirected back to this page with ?session_id=... (see the
+        // useEffect above), not here.
+        window.location.href = body.url
+        return
+      }
 
       // Scroll to top to show the success screen
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -354,6 +405,19 @@ export function Book() {
     setSelectedSlot(null)
     void loadAvailability()
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // ── Returning from Stripe Checkout: briefly confirming before showing the success screen ──
+  if (checkingPayment) {
+    return (
+      <section className="section">
+        <div className="container container--narrow">
+          <div className="loader-container">
+            <p>Confirming your payment…</p>
+          </div>
+        </div>
+      </section>
+    )
   }
 
   // ── If booking confirmed, show the success screen ──
@@ -607,6 +671,35 @@ export function Book() {
                 </label>
               </div>
 
+              <div className="book-form__section">
+                <h2 className="section-title section-title--small">Payment</h2>
+                <p className="field-hint">
+                  Amount due now: <strong>£{amountDue.toFixed(2)}</strong>
+                  {' '}({exemption === 'funeral' || exemption === 'charity' ? 'fee waived, ' : '£25 hire fee + '}£30 cleaning deposit)
+                </p>
+                <div className="field">
+                  <span>How will you pay?</span>
+                  <label className="checkbox-field">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      checked={paymentMethod === 'online'}
+                      onChange={() => setPaymentMethod('online')}
+                    />
+                    <span>Pay online now by card</span>
+                  </label>
+                  <label className="checkbox-field">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      checked={paymentMethod === 'in_person'}
+                      onChange={() => setPaymentMethod('in_person')}
+                    />
+                    <span>Pay in person at the venue</span>
+                  </label>
+                </div>
+              </div>
+
               <div className="book-form__section book-form__section--terms">
                 <h2 className="section-title section-title--small">Terms & Declaration</h2>
                 <ul className="terms-list">
@@ -627,7 +720,11 @@ export function Book() {
               </div>
 
               <button type="submit" className="btn btn--primary" disabled={submitting}>
-                {submitting ? 'Sending…' : 'Agree & request booking'}
+                {submitting
+                  ? 'Sending…'
+                  : paymentMethod === 'online'
+                    ? 'Agree & continue to payment'
+                    : 'Agree & request booking'}
               </button>
               <p className="field-hint">
                 By submitting this request, you agree to our{' '}

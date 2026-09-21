@@ -6,6 +6,7 @@ import fs from 'fs'
 import { google } from 'googleapis'
 import multer from 'multer'
 import { Resend } from 'resend'
+import Stripe from 'stripe'
 
 dotenv.config()
 
@@ -95,6 +96,11 @@ const resendApiKey = process.env.RESEND_API_KEY
 const emailConfigured = Boolean(resendApiKey)
 const resend = resendApiKey ? new Resend(resendApiKey) : null
 
+// Stripe setup
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY
+const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null
+
 const webOrigins = (process.env.WEB_ORIGIN ?? '')
   .split(',')
   .map((s) => s.trim())
@@ -106,7 +112,15 @@ app.use(
     credentials: true,
   }),
 )
-app.use(express.json({ limit: '32kb' }))
+app.use((req, res, next) => {
+  // The Stripe webhook needs the raw request body to verify its signature, so it's exempted
+  // from the global JSON parser and mounts its own express.raw() instead.
+  if (req.originalUrl === '/api/stripe/webhook') {
+    next()
+    return
+  }
+  express.json({ limit: '32kb' })(req, res, next)
+})
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true })
@@ -693,41 +707,45 @@ app.get('/api/calendar/availability', async (req, res) => {
   }
 })
 
-app.post('/api/bookings', async (req, res) => {
-  const {
-    name,
-    email,
-    phone,
-    middleName,
-    address,
-    date,
-    startTime,
-    endTime,
-    eventType,
-    attendees,
-    exemption,
-    declaration,
-    notes,
-    sendCopyToHirer,
-  } = req.body ?? {}
+type BookingFields = {
+  name: string
+  email: string
+  phone: string
+  address?: string
+  date: string
+  startTime?: string
+  endTime?: string
+  eventType?: string
+  attendees?: string | number
+  exemption?: string
+  notes?: string
+  sendCopyToHirer?: boolean
+}
 
-  // Honeypot anti-spam check
-  if (middleName) {
-    const fakeReference = `MSV-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
-    console.warn(`[spam-blocked] Blocked automated bot booking with reference ${fakeReference}. (Honeypot hit: middleName='${middleName}')`)
-    res.json({ ok: true, reference: fakeReference })
-    return
-  }
+function formatPounds(pence: number): string {
+  return `£${(pence / 100).toFixed(2)}`
+}
 
-  if (!name || !email || !phone || !date || !declaration) {
-    res.status(400).json({ error: 'Required fields missing: name, email, phone, date, and declaration are required.' })
-    return
-  }
+function paymentStatusLine(paymentMethod: 'online' | 'in_person', amountDue: number): string {
+  return paymentMethod === 'online'
+    ? `${formatPounds(amountDue)} received online via card (Stripe).`
+    : `${formatPounds(amountDue)} still owing — to be paid in person at the venue.`
+}
 
-  const reference = `MSV-${Date.now().toString(36).toUpperCase()}`
+// Shared by the in-person path (called directly) and the Stripe webhook (called once payment
+// is confirmed) — this is the only place that actually creates the Calendar event and email.
+async function createBookingRecord(
+  fields: BookingFields,
+  reference: string,
+  paymentMethod: 'online' | 'in_person',
+  amountDue: number,
+): Promise<void> {
+  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, sendCopyToHirer } = fields
+  const paymentLine = paymentStatusLine(paymentMethod, amountDue)
+
   console.info('[booking]', {
     reference, name, email, phone, address, date,
-    startTime, endTime, eventType, attendees, exemption, declaration, notes,
+    startTime, endTime, eventType, attendees, exemption, notes, paymentMethod, amountDue,
   })
 
   let htmlLink = ''
@@ -736,6 +754,8 @@ app.post('/api/bookings', async (req, res) => {
       const eventSummary = `PROVISIONAL: ${name} - ${phone} (Ref: ${reference})`
       const eventDescription = `Provisional Booking Request
 Reference: ${reference}
+
+Payment: ${paymentLine}
 
 Hirer Details:
 - Name: ${name}
@@ -782,7 +802,7 @@ ${notes || 'None'}
         : '<p><em>Note: Google Calendar event link could not be generated.</em></p>'
 
       const recipients = Array.isArray(recipient) ? [...recipient] : [recipient]
-      if (sendCopyToHirer && email && typeof email === 'string' && !recipients.includes(email)) {
+      if (sendCopyToHirer && email && !recipients.includes(email)) {
         recipients.push(email)
       }
 
@@ -793,7 +813,9 @@ ${notes || 'None'}
         html: `
           <h2>New Provisional Booking Request</h2>
           <p>A new request has been submitted with reference <strong>${reference}</strong>.</p>
-          
+
+          <p><strong>Payment:</strong> ${paymentLine}</p>
+
           <h3>Booking Details:</h3>
           <ul>
             <li><strong>Name:</strong> ${name}</li>
@@ -806,12 +828,12 @@ ${notes || 'None'}
             <li><strong>Attendees:</strong> ${attendees || 'N/A'}</li>
             <li><strong>Exemption status:</strong> ${exemption || 'none'}</li>
           </ul>
-          
+
           ${notes ? `<h3>Notes:</h3><p>${notes}</p>` : ''}
-          
+
           ${calendarLinkSection}
-          
-          <p>Please check the calendar, then get in touch with the hirer to confirm and handle the payment.</p>
+
+          <p>Please check the calendar, then get in touch with the hirer to confirm${paymentMethod === 'in_person' ? ' and take payment' : ''}.</p>
         `,
       })
 
@@ -826,8 +848,173 @@ ${notes || 'None'}
   } else {
     console.warn('[booking] Resend not configured. Notification email skipped.')
   }
+}
 
-  res.json({ ok: true, reference })
+app.post('/api/bookings', async (req, res) => {
+  const {
+    name,
+    email,
+    phone,
+    middleName,
+    address,
+    date,
+    slotType,
+    startTime,
+    endTime,
+    eventType,
+    attendees,
+    exemption,
+    declaration,
+    notes,
+    sendCopyToHirer,
+    paymentMethod,
+  } = req.body ?? {}
+
+  // Honeypot anti-spam check
+  if (middleName) {
+    const fakeReference = `MSV-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
+    console.warn(`[spam-blocked] Blocked automated bot booking with reference ${fakeReference}. (Honeypot hit: middleName='${middleName}')`)
+    res.json({ ok: true, reference: fakeReference })
+    return
+  }
+
+  if (!name || !email || !phone || !date || !declaration) {
+    res.status(400).json({ error: 'Required fields missing: name, email, phone, date, and declaration are required.' })
+    return
+  }
+
+  if (paymentMethod !== 'online' && paymentMethod !== 'in_person') {
+    res.status(400).json({ error: 'Please choose how you will pay: online now, or in person at the venue.' })
+    return
+  }
+
+  const feeExempt = exemption === 'funeral' || exemption === 'charity'
+  const amountDue = (feeExempt ? 0 : 2500) + 3000 // pence: £25 hire fee (waived) + £30 deposit
+  const reference = `MSV-${Date.now().toString(36).toUpperCase()}`
+  const fields: BookingFields = {
+    name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes,
+    sendCopyToHirer: Boolean(sendCopyToHirer),
+  }
+
+  if (paymentMethod === 'in_person') {
+    await createBookingRecord(fields, reference, 'in_person', amountDue)
+    res.json({ ok: true, reference })
+    return
+  }
+
+  if (!stripe) {
+    res.status(503).json({ error: 'Online payment is not configured on the server yet. Please choose to pay in person instead.' })
+    return
+  }
+
+  try {
+    const siteOrigin = webOrigins[0] || 'https://merriottsocialvenue.co.uk'
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'gbp',
+          unit_amount: amountDue,
+          product_data: {
+            name: 'Merriott Social Venue — Function Room Hire Fee & Cleaning Deposit',
+            description: `${date} — ${eventType || 'Function room hire'} (Ref: ${reference})`,
+          },
+        },
+        quantity: 1,
+      }],
+      customer_email: email,
+      success_url: `${siteOrigin}/book?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${siteOrigin}/book`,
+      metadata: {
+        reference,
+        amountDue: String(amountDue),
+        name,
+        email,
+        phone,
+        address: address || '',
+        date,
+        slotType: slotType || '',
+        startTime: startTime || '',
+        endTime: endTime || '',
+        eventType: eventType || '',
+        attendees: String(attendees ?? ''),
+        exemption: exemption || 'none',
+        notes: String(notes || '').slice(0, 450),
+        sendCopyToHirer: sendCopyToHirer ? 'yes' : 'no',
+      },
+    })
+    res.json({ ok: true, url: session.url })
+  } catch (e) {
+    console.error('[bookings] Failed to create Stripe checkout session:', e)
+    res.status(502).json({ error: 'Could not start payment. Please try again.' })
+  }
+})
+
+app.get('/api/bookings/checkout-session/:sessionId', async (req, res) => {
+  if (!stripe) {
+    res.status(503).json({ error: 'Online payment is not configured on the server.' })
+    return
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(req.params.sessionId)
+    if (session.payment_status !== 'paid') {
+      res.status(402).json({ error: 'Payment has not been completed for this booking.' })
+      return
+    }
+    res.json({ booking: session.metadata })
+  } catch (e) {
+    console.error('[bookings] Failed to retrieve checkout session:', e)
+    res.status(404).json({ error: 'Booking session not found.' })
+  }
+})
+
+// Guards against Stripe retrying a webhook delivery and creating a duplicate booking.
+const processedCheckoutSessions = new Set<string>()
+
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe || !stripeWebhookSecret) {
+    res.status(503).send('Stripe not configured')
+    return
+  }
+
+  let event: Stripe.Event
+  try {
+    const signature = req.headers['stripe-signature']
+    event = stripe.webhooks.constructEvent(req.body, signature as string, stripeWebhookSecret)
+  } catch (e) {
+    console.error('[stripe] Webhook signature verification failed:', e)
+    res.status(400).send('Invalid signature')
+    return
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object
+    if (!processedCheckoutSessions.has(session.id)) {
+      processedCheckoutSessions.add(session.id)
+      const metadata = session.metadata ?? {}
+      const fields: BookingFields = {
+        name: metadata.name ?? '',
+        email: metadata.email ?? '',
+        phone: metadata.phone ?? '',
+        address: metadata.address,
+        date: metadata.date ?? '',
+        startTime: metadata.startTime,
+        endTime: metadata.endTime,
+        eventType: metadata.eventType,
+        attendees: metadata.attendees,
+        exemption: metadata.exemption,
+        notes: metadata.notes,
+        sendCopyToHirer: metadata.sendCopyToHirer === 'yes',
+      }
+      const amountDue = Number(metadata.amountDue) || 0
+      await createBookingRecord(fields, metadata.reference ?? session.id, 'online', amountDue)
+      console.info(`[bookings] Booking ${metadata.reference} created from paid Stripe session ${session.id}`)
+    }
+  }
+
+  res.json({ received: true })
 })
 
 app.use((_req, res) => {

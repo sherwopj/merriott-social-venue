@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
 import type { UpcomingEvent } from '../data/upcomingEvents'
 
@@ -13,31 +13,13 @@ const CATEGORY_OPTIONS = [
   'Community / Volunteering',
 ]
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
-
-declare global {
-  interface Window {
-    google?: any
-  }
-}
-
-// Decodes the JWT payload for display only (e.g. "Signed in as ..."). This is never a
-// trust boundary — the server independently verifies the token's signature on submit.
-function decodeEmailForDisplay(credential: string): string | null {
-  try {
-    const payload = JSON.parse(atob(credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
-    return typeof payload.email === 'string' ? payload.email : null
-  } catch {
-    return null
-  }
-}
-
-export function AddEventForm({ onCreated }: { onCreated: (event: UpcomingEvent) => void }) {
-  const signInButtonRef = useRef<HTMLDivElement>(null)
-  const [scriptReady, setScriptReady] = useState(false)
-  const [credential, setCredential] = useState<string | null>(null)
-  const [displayEmail, setDisplayEmail] = useState<string | null>(null)
-
+export function AddEventForm({
+  credential,
+  onCreated,
+}: {
+  credential: string
+  onCreated: (event: UpcomingEvent) => void
+}) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState(CATEGORY_OPTIONS[0])
@@ -49,41 +31,13 @@ export function AddEventForm({ onCreated }: { onCreated: (event: UpcomingEvent) 
 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (window.google?.accounts?.id) {
-      setScriptReady(true)
-      return
-    }
-    const script = document.createElement('script')
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.onload = () => setScriptReady(true)
-    document.head.appendChild(script)
-  }, [])
-
-  useEffect(() => {
-    if (!scriptReady || !GOOGLE_CLIENT_ID || credential || !signInButtonRef.current) return
-
-    window.google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: (response: { credential: string }) => {
-        setCredential(response.credential)
-        setDisplayEmail(decodeEmailForDisplay(response.credential))
-      },
-    })
-    window.google.accounts.id.renderButton(signInButtonRef.current, { theme: 'outline', size: 'large' })
-  }, [scriptReady, credential])
-
-  if (!GOOGLE_CLIENT_ID) {
-    return <p className="notice">Adding events from the website isn't set up yet.</p>
-  }
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!credential) return
     setSubmitting(true)
     setSubmitError(null)
+    setSuccessMessage(null)
 
     try {
       const formData = new FormData()
@@ -108,6 +62,7 @@ export function AddEventForm({ onCreated }: { onCreated: (event: UpcomingEvent) 
       }
 
       onCreated(data.event as UpcomingEvent)
+      setSuccessMessage(`"${data.event.title}" was added. View it on the Events page.`)
       setTitle('')
       setDescription('')
       setCategory(CATEGORY_OPTIONS[0])
@@ -123,24 +78,8 @@ export function AddEventForm({ onCreated }: { onCreated: (event: UpcomingEvent) 
     }
   }
 
-  if (!credential) {
-    return (
-      <div>
-        <p className="field-hint">Sign in with an authorized Google account to add an event.</p>
-        <div ref={signInButtonRef} />
-      </div>
-    )
-  }
-
   return (
     <form onSubmit={handleSubmit} className="add-event-form">
-      <p className="field-hint">
-        Signed in as {displayEmail || 'you'} —{' '}
-        <button type="button" className="link-btn" onClick={() => setCredential(null)}>
-          not you?
-        </button>
-      </p>
-
       <div className="field-row">
         <label className="field">
           <span>Event date</span>
@@ -196,6 +135,7 @@ export function AddEventForm({ onCreated }: { onCreated: (event: UpcomingEvent) 
         {submitting ? 'Adding…' : 'Add event'}
       </button>
       {submitError && <p className="submit-message submit-message--error">{submitError}</p>}
+      {successMessage && <p className="submit-message">{successMessage}</p>}
     </form>
   )
 }

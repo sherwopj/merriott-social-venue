@@ -21,6 +21,8 @@ const sheetConfigured = Boolean(sheetId && serviceAccountJson)
 
 const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID
 const googleOAuthClientId = process.env.GOOGLE_OAUTH_CLIENT_ID
+const googleOAuthClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET
+const driveOwnerRefreshToken = process.env.GOOGLE_DRIVE_OWNER_REFRESH_TOKEN
 const eventEditorEmails = (process.env.EVENT_EDITOR_EMAILS ?? '')
   .split(',')
   .map((s) => s.trim().toLowerCase())
@@ -28,7 +30,6 @@ const eventEditorEmails = (process.env.EVENT_EDITOR_EMAILS ?? '')
 
 let calendar: any = null
 let sheets: any = null
-let drive: any = null
 if (calendarConfigured || sheetConfigured) {
   try {
     let credentials: any = null
@@ -43,15 +44,22 @@ if (calendarConfigured || sheetConfigured) {
       scopes: [
         'https://www.googleapis.com/auth/calendar',
         'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive.file',
       ],
     })
     calendar = google.calendar({ version: 'v3', auth })
     sheets = google.sheets({ version: 'v4', auth })
-    drive = google.drive({ version: 'v3', auth })
   } catch (e) {
     console.error('Failed to initialize Google API client:', e)
   }
+}
+
+// Service accounts have no Drive storage quota of their own, so photo uploads run as the
+// real merriottsocialvenue@gmail.com account instead, via a refresh token obtained once.
+let driveAsOwner: any = null
+if (googleOAuthClientId && googleOAuthClientSecret && driveOwnerRefreshToken) {
+  const driveOwnerAuth = new google.auth.OAuth2(googleOAuthClientId, googleOAuthClientSecret)
+  driveOwnerAuth.setCredentials({ refresh_token: driveOwnerRefreshToken })
+  driveAsOwner = google.drive({ version: 'v3', auth: driveOwnerAuth })
 }
 
 async function verifyEditorEmail(authorizationHeader: string | undefined): Promise<string | null> {
@@ -268,16 +276,16 @@ app.post(
 
     let photoDirectUrl = ''
     const file = (req as any).file as { buffer: Buffer; mimetype: string; originalname: string } | undefined
-    if (file && drive && driveFolderId) {
+    if (file && driveAsOwner && driveFolderId) {
       try {
         const { Readable } = await import('stream')
-        const created = await drive.files.create({
+        const created = await driveAsOwner.files.create({
           requestBody: { name: `${Date.now()}-${file.originalname}`, parents: [driveFolderId] },
           media: { mimeType: file.mimetype, body: Readable.from(file.buffer) },
           fields: 'id',
         })
         const fileId = created.data.id
-        await drive.permissions.create({
+        await driveAsOwner.permissions.create({
           fileId,
           requestBody: { role: 'reader', type: 'anyone' },
         })
@@ -285,8 +293,8 @@ app.post(
       } catch (e) {
         console.error(`[upcoming-events] Photo upload by ${editorEmail} failed, continuing without it:`, e)
       }
-    } else if (file && !driveFolderId) {
-      console.warn('[upcoming-events] Photo submitted but GOOGLE_DRIVE_FOLDER_ID is not set; skipping upload.')
+    } else if (file && (!driveAsOwner || !driveFolderId)) {
+      console.warn('[upcoming-events] Photo submitted but Drive upload is not fully configured; skipping upload.')
     }
 
     try {

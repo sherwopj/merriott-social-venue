@@ -16,9 +16,11 @@ const CATEGORY_OPTIONS = [
 export function AddEventForm({
   credential,
   onCreated,
+  onCredentialInvalid,
 }: {
   credential: string
   onCreated: (event: UpcomingEvent) => void
+  onCredentialInvalid: () => void
 }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -58,6 +60,10 @@ export function AddEventForm({
 
       const data = await res.json().catch(() => null)
       if (!res.ok) {
+        if (res.status === 401) {
+          onCredentialInvalid()
+          return
+        }
         throw new Error(data?.error || `Request failed (${res.status})`)
       }
 

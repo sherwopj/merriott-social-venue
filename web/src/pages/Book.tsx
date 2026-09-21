@@ -627,8 +627,15 @@ export function Book() {
               </div>
 
               <button type="submit" className="btn btn--primary" disabled={submitting}>
-                {submitting ? 'Sending…' : 'Request provisional booking'}
+                {submitting ? 'Sending…' : 'Agree & request booking'}
               </button>
+              <p className="field-hint">
+                By submitting this request, you agree to our{' '}
+                <a href={functionRoomHirePdf} target="_blank" rel="noopener noreferrer">
+                  Booking Policy
+                </a>
+                .
+              </p>
               {submitError && <p className="submit-message submit-message--error">{submitError}</p>}
             </form>
           </>

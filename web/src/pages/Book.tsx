@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
 import functionRoomHirePdf from '../assets/MSV_Function_Room_Hire_Policy_and_Form.pdf'
 
@@ -204,6 +204,8 @@ export function Book() {
   const [error, setError] = useState<string | null>(null)
   const [calendarConfigured, setCalendarConfigured] = useState(true)
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; type: 'day' | 'evening' } | null>(null)
+  const [slotMissing, setSlotMissing] = useState(false)
+  const selectedSlotFieldRef = useRef<HTMLLabelElement>(null)
 
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
@@ -315,11 +317,21 @@ export function Book() {
     return list
   }, [firstDow, totalDays, year, month])
 
+  function selectSlot(date: string, type: 'day' | 'evening', startT: string, endT: string) {
+    setSelectedSlot({ date, type })
+    setStartTime(startT)
+    setEndTime(endT)
+    setSlotMissing(false)
+    selectedSlotFieldRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setSubmitError(null)
     if (!selectedSlot) {
+      setSlotMissing(true)
       setSubmitError('Please choose an available day or evening slot.')
+      selectedSlotFieldRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
     setSubmitting(true)
@@ -514,11 +526,7 @@ export function Book() {
                           type="button"
                           className={`cal-slot cal-slot--day${isDayBusy ? ' cal-slot--busy' : ''}${daySelected ? ' cal-slot--selected' : ''}`}
                           disabled={isDayBusy || isPast}
-                          onClick={() => {
-                            setSelectedSlot({ date: c.iso!, type: 'day' })
-                            setStartTime('12:00')
-                            setEndTime('18:00')
-                          }}
+                          onClick={() => selectSlot(c.iso!, 'day', '12:00', '18:00')}
                           aria-label={`Book Day slot on ${c.iso}`}
                         >
                           Day
@@ -527,11 +535,7 @@ export function Book() {
                           type="button"
                           className={`cal-slot cal-slot--evening${isEveningBusy ? ' cal-slot--busy' : ''}${eveSelected ? ' cal-slot--selected' : ''}`}
                           disabled={isEveningBusy || isPast}
-                          onClick={() => {
-                            setSelectedSlot({ date: c.iso!, type: 'evening' })
-                            setStartTime('18:00')
-                            setEndTime('22:00')
-                          }}
+                          onClick={() => selectSlot(c.iso!, 'evening', '18:00', '22:00')}
                           aria-label={`Book Evening slot on ${c.iso}`}
                         >
                           Eve
@@ -560,7 +564,7 @@ export function Book() {
 
               <div className="book-form__section">
                 <h2 className="section-title section-title--small">Booking Details</h2>
-                <label className="field">
+                <label className="field" ref={selectedSlotFieldRef}>
                   <span>
                     Selected Slot
                     <InfoTip label="Session timing details">
@@ -572,8 +576,11 @@ export function Book() {
                     value={selectedSlot ? `${selectedSlot.date} (${selectedSlot.type === 'day' ? 'Day' : 'Evening'})` : ''}
                     readOnly
                     required
+                    aria-invalid={slotMissing}
+                    className={slotMissing ? 'input-invalid' : undefined}
                     placeholder="Pick a slot in the calendar above"
                   />
+                  {slotMissing && <p className="error-text">Please choose a day or evening slot in the calendar above.</p>}
                 </label>
                 <div className="field-row">
                   <label className="field">

@@ -998,6 +998,10 @@
   margin: 0 0 0.5rem;
 }
 
+.input-invalid {
+  border-color: #f0a8a8 !important;
+}
+
 .submit-message {
   margin-top: 1rem;
   padding: 1rem;

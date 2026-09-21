@@ -42,6 +42,9 @@ export function AddEventForm({
   const [tbc, setTbc] = useState(existingEvent?.tbc ?? false)
   const [photo, setPhoto] = useState<File | null>(null)
   const [removePhoto, setRemovePhoto] = useState(false)
+  // File inputs are uncontrolled in React — clearing the `photo` state doesn't clear what
+  // the browser displays. Changing this key forces the input to remount blank.
+  const [photoInputKey, setPhotoInputKey] = useState(0)
 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -102,11 +105,11 @@ export function AddEventForm({
         setEndDate('')
         setTicketed(false)
         setTbc(false)
-        setPhoto(null)
       } else {
-        setPhoto(null)
         setRemovePhoto(false)
       }
+      setPhoto(null)
+      setPhotoInputKey((k) => k + 1)
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Could not save the event')
     } finally {
@@ -175,6 +178,7 @@ export function AddEventForm({
       <label className="field">
         <span>{hasExistingPhoto ? 'Replace photo' : 'Photo (optional)'}</span>
         <input
+          key={photoInputKey}
           type="file"
           accept="image/png,image/jpeg,image/webp,image/gif"
           onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}

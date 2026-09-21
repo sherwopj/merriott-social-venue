@@ -3,6 +3,7 @@ import dotenv from 'dotenv'
 import express from 'express'
 import fs from 'fs'
 import { google } from 'googleapis'
+import multer from 'multer'
 import { Resend } from 'resend'
 
 dotenv.config()
@@ -18,8 +19,16 @@ const sheetId = process.env.GOOGLE_SHEET_ID
 const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:J1000'
 const sheetConfigured = Boolean(sheetId && serviceAccountJson)
 
+const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID
+const googleOAuthClientId = process.env.GOOGLE_OAUTH_CLIENT_ID
+const eventEditorEmails = (process.env.EVENT_EDITOR_EMAILS ?? '')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean)
+
 let calendar: any = null
 let sheets: any = null
+let drive: any = null
 if (calendarConfigured || sheetConfigured) {
   try {
     let credentials: any = null
@@ -33,15 +42,44 @@ if (calendarConfigured || sheetConfigured) {
       credentials,
       scopes: [
         'https://www.googleapis.com/auth/calendar',
-        'https://www.googleapis.com/auth/spreadsheets.readonly',
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive.file',
       ],
     })
     calendar = google.calendar({ version: 'v3', auth })
     sheets = google.sheets({ version: 'v4', auth })
+    drive = google.drive({ version: 'v3', auth })
   } catch (e) {
     console.error('Failed to initialize Google API client:', e)
   }
 }
+
+async function verifyEditorEmail(authorizationHeader: string | undefined): Promise<string | null> {
+  if (!googleOAuthClientId || eventEditorEmails.length === 0) return null
+  const idToken = authorizationHeader?.match(/^Bearer\s+(.+)$/i)?.[1]
+  if (!idToken) return null
+
+  try {
+    const client = new google.auth.OAuth2(googleOAuthClientId)
+    const ticket = await client.verifyIdToken({ idToken, audience: googleOAuthClientId })
+    const payload = ticket.getPayload()
+    if (!payload?.email || !payload.email_verified) return null
+
+    const email = payload.email.trim().toLowerCase()
+    return eventEditorEmails.includes(email) ? email : null
+  } catch (e) {
+    console.warn('[upcoming-events] ID token verification failed:', e)
+    return null
+  }
+}
+
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    cb(null, /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype))
+  },
+})
 
 // Resend setup
 const resendApiKey = process.env.RESEND_API_KEY
@@ -191,6 +229,111 @@ app.get('/api/upcoming-events', async (_req, res) => {
   const events = await getUpcomingEvents()
   res.json({ sheetConfigured: true, events })
 })
+
+app.post(
+  '/api/upcoming-events',
+  (req, res, next) => {
+    photoUpload.single('photo')(req, res, (err) => {
+      if (err) {
+        res.status(400).json({ error: `Invalid photo upload: ${err.message}` })
+        return
+      }
+      next()
+    })
+  },
+  async (req, res) => {
+    const editorEmail = await verifyEditorEmail(req.headers.authorization)
+    if (!editorEmail) {
+      res.status(401).json({ error: 'Sign-in required or not authorized to add events.' })
+      return
+    }
+
+    if (!sheets || !sheetConfigured) {
+      res.status(503).json({ error: 'Events sheet is not configured on the server.' })
+      return
+    }
+
+    const { title, description, category, startDate, endDate, ticketed, tbc } = req.body ?? {}
+    const categoryInfo = category ? CATEGORY_MAP[String(category).trim().toLowerCase()] : undefined
+    const parsedStartDate = typeof startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : null
+
+    if (!title || !description || !categoryInfo || !parsedStartDate) {
+      res.status(400).json({
+        error: 'title, description, a valid startDate (YYYY-MM-DD), and a recognized category are required.',
+      })
+      return
+    }
+    const parsedEndDate =
+      typeof endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : ''
+
+    let photoDirectUrl = ''
+    const file = (req as any).file as { buffer: Buffer; mimetype: string; originalname: string } | undefined
+    if (file && drive && driveFolderId) {
+      try {
+        const { Readable } = await import('stream')
+        const created = await drive.files.create({
+          requestBody: { name: `${Date.now()}-${file.originalname}`, parents: [driveFolderId] },
+          media: { mimeType: file.mimetype, body: Readable.from(file.buffer) },
+          fields: 'id',
+        })
+        const fileId = created.data.id
+        await drive.permissions.create({
+          fileId,
+          requestBody: { role: 'reader', type: 'anyone' },
+        })
+        photoDirectUrl = `https://drive.google.com/uc?export=view&id=${fileId}`
+      } catch (e) {
+        console.error(`[upcoming-events] Photo upload by ${editorEmail} failed, continuing without it:`, e)
+      }
+    } else if (file && !driveFolderId) {
+      console.warn('[upcoming-events] Photo submitted but GOOGLE_DRIVE_FOLDER_ID is not set; skipping upload.')
+    }
+
+    try {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: sheetId,
+        range: sheetRange,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [[
+            new Date().toISOString(),
+            parsedStartDate,
+            parsedEndDate,
+            String(title).trim(),
+            String(description).trim(),
+            String(category).trim(),
+            parseYesNo(ticketed) ? 'Yes' : 'No',
+            parseYesNo(tbc) ? 'Yes' : 'No',
+            '',
+            photoDirectUrl,
+          ]],
+        },
+      })
+    } catch (e) {
+      console.error(`[upcoming-events] Failed to append row (added by ${editorEmail}):`, e)
+      res.status(502).json({ error: 'Failed to save the event to the sheet.' })
+      return
+    }
+
+    upcomingEventsCache.fetchedAt = 0 // force the next GET to pick this up immediately
+    console.info(`[upcoming-events] Event "${title}" added by ${editorEmail}`)
+
+    res.status(201).json({
+      event: {
+        id: `${parsedStartDate}-${slugify(String(title))}`,
+        startDate: parsedStartDate,
+        endDate: parsedEndDate || undefined,
+        title: String(title).trim(),
+        description: String(description).trim(),
+        kicker: categoryInfo.kicker,
+        icon: categoryInfo.icon,
+        image: photoDirectUrl || undefined,
+        ticketed: parseYesNo(ticketed) || undefined,
+        tbc: parseYesNo(tbc) || undefined,
+      },
+    })
+  },
+)
 
 app.get('/api/calendar/availability', async (req, res) => {
   const { start, end } = req.query

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { weekdayOrder, weekdayLabels, weeklyEvents } from '../data/weeklyEvents'
 import { upcomingEvents as fallbackUpcomingEvents, type UpcomingEvent } from '../data/upcomingEvents'
 import { EventIcon } from '../components/EventIcon'
+import { AddEventForm } from '../components/AddEventForm'
 import { apiUrl } from '../lib/apiBase'
 
 type UpcomingEventsResponse = {
@@ -46,25 +47,24 @@ export function Events() {
   // (fed by committee members via a Form) if/when it's reachable. If it isn't — API
   // asleep, sheet not set up yet, network hiccup — this bundled list stays on screen.
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>(fallbackUpcomingEvents)
+  const [showAddForm, setShowAddForm] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-
-    fetch(apiUrl('/api/upcoming-events'))
+  const loadUpcomingEvents = useCallback(() => {
+    return fetch(apiUrl('/api/upcoming-events'))
       .then((res) => (res.ok ? (res.json() as Promise<UpcomingEventsResponse>) : null))
       .then((data) => {
-        if (!cancelled && data?.sheetConfigured && data.events.length > 0) {
+        if (data?.sheetConfigured && data.events.length > 0) {
           setUpcomingEvents(data.events)
         }
       })
       .catch(() => {
-        // Network/API error — keep showing the bundled fallback list.
+        // Network/API error — keep showing whatever list is already on screen.
       })
-
-    return () => {
-      cancelled = true
-    }
   }, [])
+
+  useEffect(() => {
+    void loadUpcomingEvents()
+  }, [loadUpcomingEvents])
 
   const sortedUpcoming = useMemo(() => {
     const today = new Date()
@@ -86,7 +86,25 @@ export function Events() {
 
         <div className="events-columns">
           <div className="events-column events-column--upcoming">
-            <h2 className="section-title">Upcoming events</h2>
+            <div className="events-column__heading">
+              <h2 className="section-title">Upcoming events</h2>
+              <button type="button" className="btn btn--ghost" onClick={() => setShowAddForm((v) => !v)}>
+                {showAddForm ? 'Cancel' : 'Add event'}
+              </button>
+            </div>
+
+            {showAddForm && (
+              <div className="add-event-panel">
+                <AddEventForm
+                  onCreated={(event) => {
+                    setUpcomingEvents((prev) => [...prev, event])
+                    setShowAddForm(false)
+                    void loadUpcomingEvents()
+                  }}
+                />
+              </div>
+            )}
+
             <ul className="upcoming-events">
               {sortedUpcoming.map((ev) => {
                 const chip = formatDateChip(ev.startDate, ev.endDate)

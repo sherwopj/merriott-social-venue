@@ -18,8 +18,8 @@ export function ManageUpcomingEvents({
   const [events, setEvents] = useState<UpcomingEvent[] | null>(null)
   const [sheetConfigured, setSheetConfigured] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [editingRow, setEditingRow] = useState<number | null>(null)
-  const [deletingRow, setDeletingRow] = useState<number | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const load = useCallback(() => {
@@ -40,13 +40,12 @@ export function ManageUpcomingEvents({
   }, [load])
 
   async function handleDelete(ev: UpcomingEvent) {
-    if (!ev.row) return
     if (!window.confirm(`Delete "${ev.title}"? This can't be undone.`)) return
 
-    setDeletingRow(ev.row)
+    setDeletingId(ev.id)
     setDeleteError(null)
     try {
-      const res = await fetch(apiUrl(`/api/upcoming-events/${ev.row}`), {
+      const res = await fetch(apiUrl(`/api/upcoming-events/${ev.id}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ calendarEventId: ev.calendarEventId, imageUrl: ev.image }),
@@ -63,7 +62,7 @@ export function ManageUpcomingEvents({
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Could not delete the event')
     } finally {
-      setDeletingRow(null)
+      setDeletingId(null)
     }
   }
 
@@ -71,7 +70,7 @@ export function ManageUpcomingEvents({
   if (!sheetConfigured) return <p className="notice">Events sheet isn't configured on the server yet.</p>
   if (!events) return <p className="field-hint">Loading…</p>
 
-  const editingEvent = events.find((ev) => ev.row === editingRow) ?? null
+  const editingEvent = events.find((ev) => ev.id === editingId) ?? null
 
   return (
     <div>
@@ -82,7 +81,7 @@ export function ManageUpcomingEvents({
       ) : (
         <ul className="manage-events-list">
           {events.map((ev) => (
-            <li key={ev.row} className="manage-event-row">
+            <li key={ev.id} className="manage-event-row">
               {ev.image ? (
                 <img src={ev.image} alt="" className="manage-event-row__thumb" />
               ) : (
@@ -96,16 +95,16 @@ export function ManageUpcomingEvents({
                 </p>
               </div>
               <div className="manage-event-row__actions">
-                <button type="button" className="btn btn--ghost" onClick={() => setEditingRow(ev.row ?? null)}>
+                <button type="button" className="btn btn--ghost" onClick={() => setEditingId(ev.id)}>
                   Edit
                 </button>
                 <button
                   type="button"
                   className="btn btn--ghost"
-                  disabled={deletingRow === ev.row}
+                  disabled={deletingId === ev.id}
                   onClick={() => handleDelete(ev)}
                 >
-                  {deletingRow === ev.row ? 'Deleting…' : 'Delete'}
+                  {deletingId === ev.id ? 'Deleting…' : 'Delete'}
                 </button>
               </div>
             </li>
@@ -120,12 +119,12 @@ export function ManageUpcomingEvents({
             credential={credential}
             existingEvent={editingEvent}
             onSaved={() => {
-              setEditingRow(null)
+              setEditingId(null)
               void load()
             }}
             onCredentialInvalid={onCredentialInvalid}
           />
-          <button type="button" className="link-btn" onClick={() => setEditingRow(null)}>
+          <button type="button" className="link-btn" onClick={() => setEditingId(null)}>
             Cancel
           </button>
         </div>

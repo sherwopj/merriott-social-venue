@@ -1,4 +1,5 @@
 import cors from 'cors'
+import { randomUUID } from 'crypto'
 import dotenv from 'dotenv'
 import express from 'express'
 import fs from 'fs'
@@ -16,7 +17,7 @@ const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 const calendarConfigured = Boolean(calendarId && serviceAccountJson)
 
 const sheetId = process.env.GOOGLE_SHEET_ID
-const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:K1000'
+const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:L1000'
 const sheetConfigured = Boolean(sheetId && serviceAccountJson)
 
 const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID
@@ -124,8 +125,10 @@ type IconName =
   | 'feathers'
 
 type UpcomingEvent = {
-  id: string
-  row?: number
+  id: string // stable UID (sheet column L) once set; falls back to a date+title slug for
+  // legacy rows created before that column existed — those aren't editable/deletable
+  // through the API until re-created, since there's no stable key to find them by.
+  row?: number // current row at the time of the read; never trust this across requests
   startDate: string
   endDate?: string
   title: string
@@ -260,7 +263,7 @@ function buildCalendarEventBody(
 function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
   const events: UpcomingEvent[] = []
   rows.forEach((row, index) => {
-    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, , photoDirectUrl, calendarEventId] = row
+    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, , photoDirectUrl, calendarEventId, uid] = row
     if (!title || !title.trim()) return
 
     const startDate = parseSheetDate(rawStart)
@@ -276,7 +279,7 @@ function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
     }
 
     events.push({
-      id: `${startDate}-${slugify(title)}`,
+      id: uid && uid.trim() ? uid.trim() : `${startDate}-${slugify(title)}`,
       row: index + 2,
       startDate,
       endDate,
@@ -292,6 +295,28 @@ function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
     })
   })
   return events
+}
+
+// Finds the row currently holding the given UID (column L) with a fresh read — never trusts
+// a row number from an earlier request, since rows shift after any delete.
+async function findRowByUid(uid: string): Promise<number | null> {
+  try {
+    const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: 'A:L' })
+    const rows: string[][] = response.data.values || []
+    const index = rows.findIndex((row) => (row[11] ?? '').trim() === uid)
+    return index === -1 ? null : index + 1 // rows[] is 0-indexed from row 1 (the header)
+  } catch (e) {
+    console.error(`[upcoming-events] Failed to look up row for uid ${uid}:`, e)
+    return null
+  }
+}
+
+// Computes the next empty row by counting existing data rather than relying on
+// values.append's own "find the table" guess, which we've seen land on the wrong row.
+async function getNextEmptyRow(): Promise<number> {
+  const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: 'A:A' })
+  const rows: string[][] = response.data.values || []
+  return rows.length + 1
 }
 
 const UPCOMING_EVENTS_CACHE_TTL_MS = 5 * 60 * 1000
@@ -385,13 +410,15 @@ app.post(
       }
     }
 
+    const uid = randomUUID()
+
     try {
-      // Deliberately not sheetRange here: append's "find the last row" search is scoped to
-      // whatever range you give it, so a narrow configured read-range would otherwise anchor
-      // every append to that same window and overwrite instead of adding a new row.
-      await sheets.spreadsheets.values.append({
+      // Explicitly computed row rather than values.append, whose own "find the last row"
+      // guess landed on an already-used row in testing and silently overwrote it.
+      const nextRow = await getNextEmptyRow()
+      await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: 'A:K',
+        range: `A${nextRow}:L${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[
@@ -406,11 +433,12 @@ app.post(
             '',
             photoDirectUrl,
             calendarEventId,
+            uid,
           ]],
         },
       })
     } catch (e) {
-      console.error(`[upcoming-events] Failed to append row (added by ${editorEmail}):`, e)
+      console.error(`[upcoming-events] Failed to save row (added by ${editorEmail}):`, e)
       res.status(502).json({ error: 'Failed to save the event to the sheet.' })
       return
     }
@@ -420,7 +448,7 @@ app.post(
 
     res.status(201).json({
       event: {
-        id: `${parsedStartDate}-${slugify(String(title))}`,
+        id: uid,
         startDate: parsedStartDate,
         endDate: parsedEndDate || undefined,
         title: String(title).trim(),
@@ -438,7 +466,7 @@ app.post(
 )
 
 app.put(
-  '/api/upcoming-events/:row',
+  '/api/upcoming-events/:id',
   (req, res, next) => {
     photoUpload.single('photo')(req, res, (err) => {
       if (err) {
@@ -460,9 +488,10 @@ app.put(
       return
     }
 
-    const row = Number(req.params.row)
-    if (!Number.isInteger(row) || row < 2) {
-      res.status(400).json({ error: 'Invalid row.' })
+    const uid = req.params.id
+    const row = await findRowByUid(uid)
+    if (row === null) {
+      res.status(404).json({ error: 'Event not found — it may already have been edited or deleted elsewhere.' })
       return
     }
 
@@ -523,7 +552,7 @@ app.put(
     try {
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `A${row}:K${row}`,
+        range: `A${row}:L${row}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[
@@ -538,6 +567,7 @@ app.put(
             '',
             photoDirectUrl,
             finalCalendarEventId,
+            uid,
           ]],
         },
       })
@@ -552,7 +582,7 @@ app.put(
 
     res.json({
       event: {
-        id: `${parsedStartDate}-${slugify(String(title))}`,
+        id: uid,
         row,
         startDate: parsedStartDate,
         endDate: parsedEndDate || undefined,
@@ -570,7 +600,7 @@ app.put(
   },
 )
 
-app.delete('/api/upcoming-events/:row', async (req, res) => {
+app.delete('/api/upcoming-events/:id', async (req, res) => {
   const editorEmail = await verifyEditorEmail(req.headers.authorization)
   if (!editorEmail) {
     res.status(401).json({ error: 'Sign-in required or not authorized to add events.' })
@@ -582,9 +612,9 @@ app.delete('/api/upcoming-events/:row', async (req, res) => {
     return
   }
 
-  const row = Number(req.params.row)
-  if (!Number.isInteger(row) || row < 2) {
-    res.status(400).json({ error: 'Invalid row.' })
+  const row = await findRowByUid(req.params.id)
+  if (row === null) {
+    res.status(404).json({ error: 'Event not found — it may already have been deleted.' })
     return
   }
 

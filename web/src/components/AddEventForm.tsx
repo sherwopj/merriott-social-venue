@@ -67,7 +67,7 @@ export function AddEventForm({
       let url = apiUrl('/api/upcoming-events')
       let method = 'POST'
       if (isEditing && existingEvent) {
-        url = apiUrl(`/api/upcoming-events/${existingEvent.row}`)
+        url = apiUrl(`/api/upcoming-events/${existingEvent.id}`)
         method = 'PUT'
         formData.append('currentImageUrl', existingEvent.image ?? '')
         formData.append('calendarEventId', existingEvent.calendarEventId ?? '')

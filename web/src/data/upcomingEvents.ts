@@ -8,15 +8,18 @@ import type { IconName } from '../components/EventIcon'
 
 export type UpcomingEvent = {
   id: string
+  row?: number // sheet row number; present on live/API data, absent on the bundled fallback
   startDate: string // 'YYYY-MM-DD'
   endDate?: string // for multi-day entries
   title: string
   description: string
+  category?: string // raw category string, used to pre-fill an edit form's dropdown
   kicker: string
   icon: IconName
   image?: string
   ticketed?: boolean
   tbc?: boolean
+  calendarEventId?: string
 }
 
 export const upcomingEvents: UpcomingEvent[] = [

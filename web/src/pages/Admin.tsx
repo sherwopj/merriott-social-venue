@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AddEventForm } from '../components/AddEventForm'
+import { ManageUpcomingEvents } from '../components/ManageUpcomingEvents'
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
 const CREDENTIAL_STORAGE_KEY = 'msv_admin_credential'
@@ -38,6 +39,7 @@ export function Admin() {
     () => (credential && decodeEmailForDisplay(credential)) || null,
   )
   const [expiredNotice, setExpiredNotice] = useState(false)
+  const [manageListKey, setManageListKey] = useState(0)
 
   function signIn(newCredential: string) {
     setCredential(newCredential)
@@ -91,7 +93,7 @@ export function Admin() {
 
   return (
     <section className="section">
-      <div className="container container--narrow">
+      <div className="container">
         <h1 className="page-title">Admin</h1>
         <p className="lede">Tools for committee members. Sign in with an authorized Google account.</p>
 
@@ -118,11 +120,14 @@ export function Admin() {
               <h2 className="section-title section-title--small">Add event</h2>
               <AddEventForm
                 credential={credential}
-                onCreated={() => {
-                  /* success message is shown inline by the form itself */
-                }}
+                onSaved={() => setManageListKey((k) => k + 1)}
                 onCredentialInvalid={() => signOut(true)}
               />
+            </div>
+
+            <div className="admin-tool">
+              <h2 className="section-title section-title--small">Manage upcoming events</h2>
+              <ManageUpcomingEvents key={manageListKey} credential={credential} onCredentialInvalid={() => signOut(true)} />
             </div>
 
             <p className="field-hint">

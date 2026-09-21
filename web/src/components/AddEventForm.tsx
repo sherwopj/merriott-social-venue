@@ -13,23 +13,35 @@ const CATEGORY_OPTIONS = [
   'Community / Volunteering',
 ]
 
+function resolveInitialCategory(existingEvent?: UpcomingEvent): string {
+  const match = CATEGORY_OPTIONS.find(
+    (opt) => opt.toLowerCase() === (existingEvent?.category ?? '').toLowerCase(),
+  )
+  return match ?? CATEGORY_OPTIONS[0]
+}
+
 export function AddEventForm({
   credential,
-  onCreated,
+  existingEvent,
+  onSaved,
   onCredentialInvalid,
 }: {
   credential: string
-  onCreated: (event: UpcomingEvent) => void
+  existingEvent?: UpcomingEvent
+  onSaved: (event: UpcomingEvent) => void
   onCredentialInvalid: () => void
 }) {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [category, setCategory] = useState(CATEGORY_OPTIONS[0])
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [ticketed, setTicketed] = useState(false)
-  const [tbc, setTbc] = useState(false)
+  const isEditing = Boolean(existingEvent)
+
+  const [title, setTitle] = useState(existingEvent?.title ?? '')
+  const [description, setDescription] = useState(existingEvent?.description ?? '')
+  const [category, setCategory] = useState(() => resolveInitialCategory(existingEvent))
+  const [startDate, setStartDate] = useState(existingEvent?.startDate ?? '')
+  const [endDate, setEndDate] = useState(existingEvent?.endDate ?? '')
+  const [ticketed, setTicketed] = useState(existingEvent?.ticketed ?? false)
+  const [tbc, setTbc] = useState(existingEvent?.tbc ?? false)
   const [photo, setPhoto] = useState<File | null>(null)
+  const [removePhoto, setRemovePhoto] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -52,8 +64,18 @@ export function AddEventForm({
       formData.append('tbc', tbc ? 'yes' : 'no')
       if (photo) formData.append('photo', photo)
 
-      const res = await fetch(apiUrl('/api/upcoming-events'), {
-        method: 'POST',
+      let url = apiUrl('/api/upcoming-events')
+      let method = 'POST'
+      if (isEditing && existingEvent) {
+        url = apiUrl(`/api/upcoming-events/${existingEvent.row}`)
+        method = 'PUT'
+        formData.append('currentImageUrl', existingEvent.image ?? '')
+        formData.append('calendarEventId', existingEvent.calendarEventId ?? '')
+        formData.append('removePhoto', removePhoto ? 'yes' : 'no')
+      }
+
+      const res = await fetch(url, {
+        method,
         headers: { Authorization: `Bearer ${credential}` },
         body: formData,
       })
@@ -67,22 +89,32 @@ export function AddEventForm({
         throw new Error(data?.error || `Request failed (${res.status})`)
       }
 
-      onCreated(data.event as UpcomingEvent)
-      setSuccessMessage(`"${data.event.title}" was added. View it on the Events page.`)
-      setTitle('')
-      setDescription('')
-      setCategory(CATEGORY_OPTIONS[0])
-      setStartDate('')
-      setEndDate('')
-      setTicketed(false)
-      setTbc(false)
-      setPhoto(null)
+      onSaved(data.event as UpcomingEvent)
+      setSuccessMessage(
+        isEditing ? `"${data.event.title}" was updated.` : `"${data.event.title}" was added. View it on the Events page.`,
+      )
+
+      if (!isEditing) {
+        setTitle('')
+        setDescription('')
+        setCategory(CATEGORY_OPTIONS[0])
+        setStartDate('')
+        setEndDate('')
+        setTicketed(false)
+        setTbc(false)
+        setPhoto(null)
+      } else {
+        setPhoto(null)
+        setRemovePhoto(false)
+      }
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Could not add the event')
+      setSubmitError(err instanceof Error ? err.message : 'Could not save the event')
     } finally {
       setSubmitting(false)
     }
   }
+
+  const hasExistingPhoto = Boolean(existingEvent?.image) && !removePhoto
 
   return (
     <form onSubmit={handleSubmit} className="add-event-form">
@@ -128,8 +160,20 @@ export function AddEventForm({
         Details still to be confirmed
       </label>
 
+      {isEditing && hasExistingPhoto && (
+        <div className="field">
+          <span>Current photo</span>
+          <div className="photo-preview">
+            <img src={existingEvent!.image} alt="Current event" />
+            <button type="button" className="link-btn" onClick={() => setRemovePhoto(true)}>
+              Remove photo
+            </button>
+          </div>
+        </div>
+      )}
+
       <label className="field">
-        <span>Photo (optional)</span>
+        <span>{hasExistingPhoto ? 'Replace photo' : 'Photo (optional)'}</span>
         <input
           type="file"
           accept="image/png,image/jpeg,image/webp,image/gif"
@@ -138,7 +182,7 @@ export function AddEventForm({
       </label>
 
       <button type="submit" className="btn btn--primary" disabled={submitting}>
-        {submitting ? 'Adding…' : 'Add event'}
+        {submitting ? 'Saving…' : isEditing ? 'Save changes' : 'Add event'}
       </button>
       {submitError && <p className="submit-message submit-message--error">{submitError}</p>}
       {successMessage && <p className="submit-message">{successMessage}</p>}

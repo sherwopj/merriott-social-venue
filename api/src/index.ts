@@ -16,7 +16,7 @@ const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 const calendarConfigured = Boolean(calendarId && serviceAccountJson)
 
 const sheetId = process.env.GOOGLE_SHEET_ID
-const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:J1000'
+const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:K1000'
 const sheetConfigured = Boolean(sheetId && serviceAccountJson)
 
 const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID
@@ -125,15 +125,18 @@ type IconName =
 
 type UpcomingEvent = {
   id: string
+  row?: number
   startDate: string
   endDate?: string
   title: string
   description: string
+  category?: string // raw category string, e.g. for pre-filling an edit form's dropdown
   kicker: string
   icon: IconName
   image?: string
   ticketed?: boolean
   tbc?: boolean
+  calendarEventId?: string
 }
 
 // Keyed by the Form's "Category" dropdown option (case-insensitive).
@@ -179,10 +182,85 @@ function slugify(text: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
+function extractDriveFileId(url: string | undefined): string | null {
+  const match = (url ?? '').match(/[?&]id=([^&]+)/)
+  return match ? match[1] : null
+}
+
+async function deleteDriveFile(url: string | undefined): Promise<void> {
+  const fileId = extractDriveFileId(url)
+  if (!fileId || !driveAsOwner) return
+  try {
+    await driveAsOwner.files.delete({ fileId })
+  } catch (e) {
+    console.warn('[events] Failed to delete old Drive file (continuing):', e)
+  }
+}
+
+async function uploadPhoto(file: { buffer: Buffer; mimetype: string; originalname: string }): Promise<string> {
+  if (!driveAsOwner || !driveFolderId) {
+    console.warn('[events] Photo submitted but Drive upload is not fully configured; skipping upload.')
+    return ''
+  }
+  try {
+    const { Readable } = await import('stream')
+    const created = await driveAsOwner.files.create({
+      requestBody: { name: `${Date.now()}-${file.originalname}`, parents: [driveFolderId] },
+      media: { mimeType: file.mimetype, body: Readable.from(file.buffer) },
+      fields: 'id',
+    })
+    const fileId = created.data.id
+    await driveAsOwner.permissions.create({
+      fileId,
+      requestBody: { role: 'reader', type: 'anyone' },
+    })
+    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`
+  } catch (e) {
+    console.error('[events] Photo upload failed, continuing without it:', e)
+    return ''
+  }
+}
+
+const sheetTabIdCache = new Map<string, number>()
+async function getSheetTabId(tabName?: string): Promise<number | null> {
+  const cacheKey = tabName ?? '__default__'
+  if (sheetTabIdCache.has(cacheKey)) return sheetTabIdCache.get(cacheKey)!
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'sheets.properties' })
+    const sheetsList = meta.data.sheets ?? []
+    const match = tabName
+      ? sheetsList.find((s: any) => s.properties?.title === tabName)
+      : sheetsList[0]
+    const id = match?.properties?.sheetId
+    if (typeof id !== 'number') return null
+    sheetTabIdCache.set(cacheKey, id)
+    return id
+  } catch (e) {
+    console.error('[events] Failed to resolve sheet tab id:', e)
+    return null
+  }
+}
+
+function buildCalendarEventBody(
+  title: string,
+  description: string,
+  kicker: string,
+  editorEmail: string,
+  startDate: string,
+  endDate: string,
+) {
+  return {
+    summary: title,
+    description: `${description}\n\nCategory: ${kicker}\nAdded via website by ${editorEmail}`,
+    start: { date: startDate },
+    end: { date: addDays(endDate || startDate, 1) },
+  }
+}
+
 function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
   const events: UpcomingEvent[] = []
   rows.forEach((row, index) => {
-    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, , photoDirectUrl] = row
+    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, , photoDirectUrl, calendarEventId] = row
     if (!title || !title.trim()) return
 
     const startDate = parseSheetDate(rawStart)
@@ -199,15 +277,18 @@ function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
 
     events.push({
       id: `${startDate}-${slugify(title)}`,
+      row: index + 2,
       startDate,
       endDate,
       title: title.trim(),
       description: (description ?? '').trim(),
+      category: category && category.trim() ? category.trim() : undefined,
       kicker: categoryInfo.kicker,
       icon: categoryInfo.icon,
       image: photoDirectUrl && photoDirectUrl.trim() ? photoDirectUrl.trim() : undefined,
       ticketed: parseYesNo(ticketed) || undefined,
       tbc: parseYesNo(tbc) || undefined,
+      calendarEventId: calendarEventId && calendarEventId.trim() ? calendarEventId.trim() : undefined,
     })
   })
   return events
@@ -281,27 +362,27 @@ app.post(
     const parsedEndDate =
       typeof endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : ''
 
-    let photoDirectUrl = ''
     const file = (req as any).file as { buffer: Buffer; mimetype: string; originalname: string } | undefined
-    if (file && driveAsOwner && driveFolderId) {
+    const photoDirectUrl = file ? await uploadPhoto(file) : ''
+
+    let calendarEventId = ''
+    if (calendar && calendarId) {
       try {
-        const { Readable } = await import('stream')
-        const created = await driveAsOwner.files.create({
-          requestBody: { name: `${Date.now()}-${file.originalname}`, parents: [driveFolderId] },
-          media: { mimeType: file.mimetype, body: Readable.from(file.buffer) },
-          fields: 'id',
+        const created = await calendar.events.insert({
+          calendarId,
+          requestBody: buildCalendarEventBody(
+            String(title).trim(),
+            String(description).trim(),
+            categoryInfo.kicker,
+            editorEmail,
+            parsedStartDate,
+            parsedEndDate,
+          ),
         })
-        const fileId = created.data.id
-        await driveAsOwner.permissions.create({
-          fileId,
-          requestBody: { role: 'reader', type: 'anyone' },
-        })
-        photoDirectUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`
+        calendarEventId = created.data.id ?? ''
       } catch (e) {
-        console.error(`[upcoming-events] Photo upload by ${editorEmail} failed, continuing without it:`, e)
+        console.error(`[upcoming-events] Failed to create calendar event for "${title}":`, e)
       }
-    } else if (file && (!driveAsOwner || !driveFolderId)) {
-      console.warn('[upcoming-events] Photo submitted but Drive upload is not fully configured; skipping upload.')
     }
 
     try {
@@ -310,7 +391,7 @@ app.post(
       // every append to that same window and overwrite instead of adding a new row.
       await sheets.spreadsheets.values.append({
         spreadsheetId: sheetId,
-        range: 'A:J',
+        range: 'A:K',
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[
@@ -324,6 +405,7 @@ app.post(
             parseYesNo(tbc) ? 'Yes' : 'No',
             '',
             photoDirectUrl,
+            calendarEventId,
           ]],
         },
       })
@@ -336,22 +418,6 @@ app.post(
     upcomingEventsCache.fetchedAt = 0 // force the next GET to pick this up immediately
     console.info(`[upcoming-events] Event "${title}" added by ${editorEmail}`)
 
-    if (calendar && calendarId) {
-      try {
-        await calendar.events.insert({
-          calendarId,
-          requestBody: {
-            summary: String(title).trim(),
-            description: `${String(description).trim()}\n\nCategory: ${categoryInfo.kicker}\nAdded via website by ${editorEmail}`,
-            start: { date: parsedStartDate },
-            end: { date: addDays(parsedEndDate || parsedStartDate, 1) },
-          },
-        })
-      } catch (e) {
-        console.error(`[upcoming-events] Failed to create calendar event for "${title}":`, e)
-      }
-    }
-
     res.status(201).json({
       event: {
         id: `${parsedStartDate}-${slugify(String(title))}`,
@@ -359,15 +425,210 @@ app.post(
         endDate: parsedEndDate || undefined,
         title: String(title).trim(),
         description: String(description).trim(),
+        category: String(category).trim(),
         kicker: categoryInfo.kicker,
         icon: categoryInfo.icon,
         image: photoDirectUrl || undefined,
         ticketed: parseYesNo(ticketed) || undefined,
         tbc: parseYesNo(tbc) || undefined,
+        calendarEventId: calendarEventId || undefined,
       },
     })
   },
 )
+
+app.put(
+  '/api/upcoming-events/:row',
+  (req, res, next) => {
+    photoUpload.single('photo')(req, res, (err) => {
+      if (err) {
+        res.status(400).json({ error: `Invalid photo upload: ${err.message}` })
+        return
+      }
+      next()
+    })
+  },
+  async (req, res) => {
+    const editorEmail = await verifyEditorEmail(req.headers.authorization)
+    if (!editorEmail) {
+      res.status(401).json({ error: 'Sign-in required or not authorized to add events.' })
+      return
+    }
+
+    if (!sheets || !sheetConfigured) {
+      res.status(503).json({ error: 'Events sheet is not configured on the server.' })
+      return
+    }
+
+    const row = Number(req.params.row)
+    if (!Number.isInteger(row) || row < 2) {
+      res.status(400).json({ error: 'Invalid row.' })
+      return
+    }
+
+    const {
+      title, description, category, startDate, endDate, ticketed, tbc,
+      removePhoto, currentImageUrl, calendarEventId,
+    } = req.body ?? {}
+    const categoryInfo = category ? CATEGORY_MAP[String(category).trim().toLowerCase()] : undefined
+    const parsedStartDate = typeof startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : null
+
+    if (!title || !description || !categoryInfo || !parsedStartDate) {
+      res.status(400).json({
+        error: 'title, description, a valid startDate (YYYY-MM-DD), and a recognized category are required.',
+      })
+      return
+    }
+    const parsedEndDate =
+      typeof endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : ''
+
+    const file = (req as any).file as { buffer: Buffer; mimetype: string; originalname: string } | undefined
+    let photoDirectUrl = typeof currentImageUrl === 'string' ? currentImageUrl.trim() : ''
+    if (file) {
+      await deleteDriveFile(photoDirectUrl)
+      photoDirectUrl = await uploadPhoto(file)
+    } else if (parseYesNo(removePhoto)) {
+      await deleteDriveFile(photoDirectUrl)
+      photoDirectUrl = ''
+    }
+
+    let finalCalendarEventId = typeof calendarEventId === 'string' ? calendarEventId.trim() : ''
+    if (calendar && calendarId) {
+      const body = buildCalendarEventBody(
+        String(title).trim(),
+        String(description).trim(),
+        categoryInfo.kicker,
+        editorEmail,
+        parsedStartDate,
+        parsedEndDate,
+      )
+      try {
+        if (finalCalendarEventId) {
+          await calendar.events.update({ calendarId, eventId: finalCalendarEventId, requestBody: body })
+        } else {
+          const created = await calendar.events.insert({ calendarId, requestBody: body })
+          finalCalendarEventId = created.data.id ?? ''
+        }
+      } catch (e) {
+        console.warn(`[upcoming-events] Calendar update failed for row ${row}, creating a fresh event instead:`, e)
+        try {
+          const created = await calendar.events.insert({ calendarId, requestBody: body })
+          finalCalendarEventId = created.data.id ?? ''
+        } catch (e2) {
+          console.error(`[upcoming-events] Calendar create fallback also failed for row ${row}:`, e2)
+        }
+      }
+    }
+
+    try {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: sheetId,
+        range: `A${row}:K${row}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [[
+            new Date().toISOString(),
+            parsedStartDate,
+            parsedEndDate,
+            String(title).trim(),
+            String(description).trim(),
+            String(category).trim(),
+            parseYesNo(ticketed) ? 'Yes' : 'No',
+            parseYesNo(tbc) ? 'Yes' : 'No',
+            '',
+            photoDirectUrl,
+            finalCalendarEventId,
+          ]],
+        },
+      })
+    } catch (e) {
+      console.error(`[upcoming-events] Failed to update row ${row} (by ${editorEmail}):`, e)
+      res.status(502).json({ error: 'Failed to save changes to the sheet.' })
+      return
+    }
+
+    upcomingEventsCache.fetchedAt = 0
+    console.info(`[upcoming-events] Row ${row} ("${title}") updated by ${editorEmail}`)
+
+    res.json({
+      event: {
+        id: `${parsedStartDate}-${slugify(String(title))}`,
+        row,
+        startDate: parsedStartDate,
+        endDate: parsedEndDate || undefined,
+        title: String(title).trim(),
+        description: String(description).trim(),
+        category: String(category).trim(),
+        kicker: categoryInfo.kicker,
+        icon: categoryInfo.icon,
+        image: photoDirectUrl || undefined,
+        ticketed: parseYesNo(ticketed) || undefined,
+        tbc: parseYesNo(tbc) || undefined,
+        calendarEventId: finalCalendarEventId || undefined,
+      },
+    })
+  },
+)
+
+app.delete('/api/upcoming-events/:row', async (req, res) => {
+  const editorEmail = await verifyEditorEmail(req.headers.authorization)
+  if (!editorEmail) {
+    res.status(401).json({ error: 'Sign-in required or not authorized to add events.' })
+    return
+  }
+
+  if (!sheets || !sheetConfigured) {
+    res.status(503).json({ error: 'Events sheet is not configured on the server.' })
+    return
+  }
+
+  const row = Number(req.params.row)
+  if (!Number.isInteger(row) || row < 2) {
+    res.status(400).json({ error: 'Invalid row.' })
+    return
+  }
+
+  const { calendarEventId, imageUrl } = req.body ?? {}
+
+  if (calendar && calendarId && typeof calendarEventId === 'string' && calendarEventId) {
+    try {
+      await calendar.events.delete({ calendarId, eventId: calendarEventId })
+    } catch (e) {
+      console.warn(`[upcoming-events] Failed to delete calendar event for row ${row} (continuing):`, e)
+    }
+  }
+
+  if (typeof imageUrl === 'string' && imageUrl) {
+    await deleteDriveFile(imageUrl)
+  }
+
+  const tabId = await getSheetTabId()
+  if (tabId === null) {
+    res.status(502).json({ error: 'Could not resolve the sheet to delete from.' })
+    return
+  }
+
+  try {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: {
+        requests: [{
+          deleteDimension: {
+            range: { sheetId: tabId, dimension: 'ROWS', startIndex: row - 1, endIndex: row },
+          },
+        }],
+      },
+    })
+  } catch (e) {
+    console.error(`[upcoming-events] Failed to delete row ${row} (by ${editorEmail}):`, e)
+    res.status(502).json({ error: 'Failed to delete the event from the sheet.' })
+    return
+  }
+
+  upcomingEventsCache.fetchedAt = 0
+  console.info(`[upcoming-events] Row ${row} deleted by ${editorEmail}`)
+  res.json({ ok: true })
+})
 
 app.get('/api/calendar/availability', async (req, res) => {
   const { start, end } = req.query

@@ -975,8 +975,10 @@ app.post('/api/bookings', async (req, res) => {
         quantity: 1,
       }],
       customer_email: email,
-      success_url: `${siteOrigin}/book?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${siteOrigin}/book`,
+      // The app uses HashRouter, so the route must be in the fragment (#/book), not the path,
+      // or the browser lands on a plain /book URL that HashRouter can't match and Home renders instead.
+      success_url: `${siteOrigin}/#/book?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${siteOrigin}/#/book`,
       metadata: {
         reference,
         amountDue: String(amounts.total),

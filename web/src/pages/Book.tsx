@@ -1,4 +1,5 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiUrl } from '../lib/apiBase'
 import functionRoomHirePdf from '../assets/MSV_Function_Room_Hire_Policy_and_Form.pdf'
 
@@ -239,11 +240,14 @@ export function Book() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null)
   const [checkingPayment, setCheckingPayment] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // After a redirect back from Stripe Checkout, look up what was paid and show the same
-  // confirmation screen the in-person path shows immediately.
+  // confirmation screen the in-person path shows immediately. Uses react-router's
+  // useSearchParams rather than window.location.search, since with HashRouter the query
+  // string lives inside the #fragment, not the browser's real query string.
   useEffect(() => {
-    const sessionId = new URLSearchParams(window.location.search).get('session_id')
+    const sessionId = searchParams.get('session_id')
     if (!sessionId) return
 
     setCheckingPayment(true)
@@ -271,8 +275,9 @@ export function Book() {
       .catch((err) => setSubmitError(err instanceof Error ? err.message : 'Could not confirm your payment.'))
       .finally(() => {
         setCheckingPayment(false)
-        window.history.replaceState({}, '', window.location.pathname)
+        setSearchParams({}, { replace: true })
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const range = useMemo(() => {

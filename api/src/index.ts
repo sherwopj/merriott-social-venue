@@ -289,7 +289,7 @@ app.post(
           fileId,
           requestBody: { role: 'reader', type: 'anyone' },
         })
-        photoDirectUrl = `https://drive.google.com/uc?export=view&id=${fileId}`
+        photoDirectUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`
       } catch (e) {
         console.error(`[upcoming-events] Photo upload by ${editorEmail} failed, continuing without it:`, e)
       }

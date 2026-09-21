@@ -10,24 +10,6 @@ type UpcomingEventsResponse = {
   events: UpcomingEvent[]
 }
 
-const MONTH_ABBR = [
-  'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
-  'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
-]
-
-function formatDateChip(startDate: string, endDate?: string) {
-  const start = new Date(`${startDate}T00:00:00`)
-  const startDay = start.getDate()
-  const month = MONTH_ABBR[start.getMonth()]
-
-  if (endDate) {
-    const end = new Date(`${endDate}T00:00:00`)
-    return { day: `${startDay}–${end.getDate()}`, month }
-  }
-
-  return { day: String(startDay), month }
-}
-
 function formatLongDate(startDate: string, endDate?: string) {
   const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric' }
   const start = new Date(`${startDate}T00:00:00`)
@@ -94,13 +76,8 @@ export function Events() {
 
             <ul className="upcoming-events">
               {sortedUpcoming.map((ev) => {
-                const chip = formatDateChip(ev.startDate, ev.endDate)
                 return (
                   <li key={ev.id} className="upcoming-event">
-                    <div className="upcoming-event__date" aria-hidden="true">
-                      <span className="upcoming-event__date-day">{chip.day}</span>
-                      <span className="upcoming-event__date-month">{chip.month}</span>
-                    </div>
                     <div className="upcoming-event__media">
                       {ev.image ? (
                         <img src={ev.image} alt={ev.title} loading="lazy" decoding="async" />
@@ -111,10 +88,10 @@ export function Events() {
                     <div className="upcoming-event__body">
                       <p className="upcoming-event__kicker">{ev.kicker}</p>
                       <h3 className="upcoming-event__title">{ev.title}</h3>
-                      <p className="upcoming-event__description">{ev.description}</p>
                       <p className="upcoming-event__full-date">
                         <time dateTime={ev.startDate}>{formatLongDate(ev.startDate, ev.endDate)}</time>
                       </p>
+                      <p className="upcoming-event__description">{ev.description}</p>
                       {(ev.ticketed || ev.tbc) && (
                         <p className={`event-pill ${ev.ticketed ? 'event-pill--ticketed' : 'event-pill--tbc'}`}>
                           {ev.ticketed ? 'Tickets required' : 'Details to be confirmed'}

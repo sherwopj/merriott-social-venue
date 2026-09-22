@@ -103,6 +103,13 @@ export function ManageUpcomingEvents({
                 </p>
                 <p className="manage-event-row__title">{ev.title}</p>
                 <p className="manage-event-row__date">{ev.room ?? 'MSV Function Room'}</p>
+                {(ev.addedBy || ev.lastUpdatedBy) && (
+                  <p className="manage-event-row__date">
+                    {ev.addedBy && `Added by ${ev.addedBy}`}
+                    {ev.addedBy && ev.lastUpdatedBy ? ' · ' : ''}
+                    {ev.lastUpdatedBy && `Last updated by ${ev.lastUpdatedBy}`}
+                  </p>
+                )}
                 {ev.calendarEventLink && (
                   <a href={ev.calendarEventLink} target="_blank" rel="noopener noreferrer" className="manage-event-row__cal-link">
                     View in Calendar ↗

@@ -23,6 +23,8 @@ export type UpcomingEvent = {
   calendarEventId?: string
   calendarEventLink?: string
   room?: 'MSV Function Room' | 'MSV Front Bar'
+  addedBy?: string
+  lastUpdatedBy?: string
 }
 
 export const upcomingEvents: UpcomingEvent[] = [

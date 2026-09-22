@@ -32,6 +32,7 @@ export type Booking = {
   calendarEventLink?: string
   paymentIntentId?: string
   createdBy: string
+  lastUpdatedBy?: string
 }
 
 type BookingsResponse = {
@@ -192,6 +193,10 @@ export function AdminBookings() {
                     <p className="manage-event-row__date">
                       {statusLabel(b.status)} · {b.paid ? 'Paid' : 'Awaiting payment'} ·{' '}
                       {EXEMPTION_LABELS[b.exemption] || b.exemption} · Total: {formatPounds(b.total)}
+                    </p>
+                    <p className="manage-event-row__date">
+                      Created by {b.createdBy}
+                      {b.lastUpdatedBy ? ` · Last updated by ${b.lastUpdatedBy}` : ''}
                     </p>
                     {b.calendarEventLink && (
                       <a href={b.calendarEventLink} target="_blank" rel="noopener noreferrer" className="manage-event-row__cal-link">

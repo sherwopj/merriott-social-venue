@@ -19,7 +19,7 @@ const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 const calendarConfigured = Boolean(calendarId && serviceAccountJson)
 
 const sheetId = process.env.GOOGLE_SHEET_ID
-const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:N1000'
+const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:P1000'
 const sheetConfigured = Boolean(sheetId && serviceAccountJson)
 
 const ROOMS = ['MSV Function Room', 'MSV Front Bar'] as const
@@ -32,7 +32,7 @@ function calendarIdForRoom(room: string | undefined): string | undefined {
 }
 
 const bookingsSheetId = process.env.GOOGLE_BOOKINGS_SHEET_ID
-const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:Y1000'
+const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:Z1000'
 const bookingsSheetConfigured = Boolean(bookingsSheetId && serviceAccountJson)
 
 const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID
@@ -176,6 +176,8 @@ type UpcomingEvent = {
   room: Room
   startTime: string
   endTime: string
+  addedBy: string
+  lastUpdatedBy?: string
 }
 
 // Keyed by the Form's "Category" dropdown option (case-insensitive).
@@ -350,7 +352,7 @@ function buildCalendarEventBody(
 function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
   const events: UpcomingEvent[] = []
   rows.forEach((row, index) => {
-    const [, rawDate, title, description, category, ticketed, tbc, photoDirectUrl, calendarEventId, calendarEventLink, uid, room, startTime, endTime] = row
+    const [, rawDate, title, description, category, ticketed, tbc, photoDirectUrl, calendarEventId, calendarEventLink, uid, room, startTime, endTime, addedBy, lastUpdatedBy] = row
     if (!title || !title.trim()) return
 
     const startDate = parseSheetDate(rawDate)
@@ -384,6 +386,8 @@ function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
       room: (ROOMS as readonly string[]).includes((room ?? '').trim()) ? (room.trim() as Room) : DEFAULT_ROOM,
       startTime: startTime && startTime.trim() ? startTime.trim() : '18:00',
       endTime: endTime && endTime.trim() ? endTime.trim() : '22:00',
+      addedBy: addedBy && addedBy.trim() ? addedBy.trim() : 'unknown',
+      lastUpdatedBy: lastUpdatedBy && lastUpdatedBy.trim() ? lastUpdatedBy.trim() : undefined,
     })
   })
   return events
@@ -515,7 +519,7 @@ app.post(
       const nextRow = await getNextEmptyRow()
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `A${nextRow}:N${nextRow}`,
+        range: `A${nextRow}:P${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[
@@ -533,6 +537,8 @@ app.post(
             resolvedRoom,
             parsedStartTime,
             parsedEndTime,
+            editorEmail,
+            '',
           ]],
         },
       })
@@ -574,6 +580,7 @@ app.post(
         room: resolvedRoom,
         startTime: parsedStartTime,
         endTime: parsedEndTime,
+        addedBy: editorEmail,
       },
     })
   },
@@ -611,7 +618,7 @@ app.put(
 
     const {
       title, description, category, startDate, startTime, endTime, ticketed, tbc,
-      removePhoto, currentImageUrl, calendarEventId, calendarEventLink, room, previousRoom,
+      removePhoto, currentImageUrl, calendarEventId, calendarEventLink, room, previousRoom, addedBy,
     } = req.body ?? {}
     const categoryInfo = category ? CATEGORY_MAP[String(category).trim().toLowerCase()] : undefined
     const parsedStartDate = typeof startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : null
@@ -683,7 +690,7 @@ app.put(
     try {
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `A${row}:N${row}`,
+        range: `A${row}:P${row}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[
@@ -701,6 +708,8 @@ app.put(
             resolvedRoom,
             parsedStartTime,
             parsedEndTime,
+            typeof addedBy === 'string' && addedBy ? addedBy : editorEmail,
+            editorEmail,
           ]],
         },
       })
@@ -731,6 +740,8 @@ app.put(
         room: resolvedRoom,
         startTime: parsedStartTime,
         endTime: parsedEndTime,
+        addedBy: typeof addedBy === 'string' && addedBy ? addedBy : editorEmail,
+        lastUpdatedBy: editorEmail,
       },
     })
   },
@@ -999,6 +1010,7 @@ type BookingRecord = {
   calendarEventLink?: string
   paymentIntentId?: string
   createdBy: string
+  lastUpdatedBy?: string
 }
 
 function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
@@ -1006,6 +1018,7 @@ function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
     , reference, status, paymentMethod, paid, date, startTime, endTime,
     eventType, attendees, exemption, barOpenTime, notes, name, email, phone, address,
     feeAmount, depositAmount, barSurchargeAmount, total, calendarEventId, calendarEventLink, paymentIntentId, createdBy,
+    lastUpdatedBy,
   ] = row
   if (!reference || !reference.trim()) return null
 
@@ -1034,6 +1047,7 @@ function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
     calendarEventLink: calendarEventLink && calendarEventLink.trim() ? calendarEventLink.trim() : undefined,
     paymentIntentId: paymentIntentId && paymentIntentId.trim() ? paymentIntentId.trim() : undefined,
     createdBy: createdBy && createdBy.trim() ? createdBy.trim() : 'website',
+    lastUpdatedBy: lastUpdatedBy && lastUpdatedBy.trim() ? lastUpdatedBy.trim() : undefined,
   }
 }
 
@@ -1071,6 +1085,7 @@ function bookingRowValues(b: {
   calendarEventLink: string
   paymentIntentId: string
   createdBy: string
+  lastUpdatedBy: string
 }): string[] {
   return [
     new Date().toISOString(),
@@ -1098,6 +1113,7 @@ function bookingRowValues(b: {
     b.calendarEventLink,
     b.paymentIntentId,
     b.createdBy,
+    b.lastUpdatedBy,
   ]
 }
 
@@ -1106,7 +1122,7 @@ function bookingRowValues(b: {
 // returns it already parsed, since every admin action needs both.
 async function getBookingByReference(reference: string): Promise<{ row: number; booking: BookingRecord } | null> {
   try {
-    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:Y' })
+    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:Z' })
     const rows: string[][] = response.data.values || []
     const index = rows.findIndex((row) => (row[1] ?? '').trim() === reference)
     if (index === -1) return null
@@ -1257,7 +1273,7 @@ async function createBookingRecord(
       const nextRow = await getNextEmptyBookingRow()
       await sheets.spreadsheets.values.update({
         spreadsheetId: bookingsSheetId,
-        range: `A${nextRow}:Y${nextRow}`,
+        range: `A${nextRow}:Z${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [bookingRowValues({
@@ -1285,6 +1301,7 @@ async function createBookingRecord(
             calendarEventLink: htmlLink,
             paymentIntentId: paymentIntentId || '',
             createdBy,
+            lastUpdatedBy: '',
           })],
         },
       })
@@ -1585,6 +1602,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
     calendarEventLink: existing.calendarEventLink,
     paymentIntentId: existing.paymentIntentId,
     createdBy: existing.createdBy,
+    lastUpdatedBy: editorEmail,
     name: String(name).trim(),
     email: String(email).trim(),
     phone: String(phone).trim(),
@@ -1625,7 +1643,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:Y${row}`,
+      range: `A${row}:Z${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
@@ -1633,6 +1651,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
           calendarEventId: updated.calendarEventId || '',
           calendarEventLink: updated.calendarEventLink || '',
           paymentIntentId: updated.paymentIntentId || '',
+          lastUpdatedBy: updated.lastUpdatedBy || '',
         })],
       },
     })
@@ -1687,7 +1706,7 @@ app.post('/api/admin/bookings/:reference/confirm', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:Y${row}`,
+      range: `A${row}:Z${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
@@ -1696,6 +1715,7 @@ app.post('/api/admin/bookings/:reference/confirm', async (req, res) => {
           calendarEventId: existing.calendarEventId || '',
           calendarEventLink: existing.calendarEventLink || '',
           paymentIntentId: existing.paymentIntentId || '',
+          lastUpdatedBy: editorEmail,
         })],
       },
     })
@@ -1741,7 +1761,7 @@ app.delete('/api/admin/bookings/:reference', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:Y${row}`,
+      range: `A${row}:Z${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
@@ -1750,6 +1770,7 @@ app.delete('/api/admin/bookings/:reference', async (req, res) => {
           calendarEventId: existing.calendarEventId || '',
           calendarEventLink: existing.calendarEventLink || '',
           paymentIntentId: existing.paymentIntentId || '',
+          lastUpdatedBy: editorEmail,
         })],
       },
     })

@@ -83,6 +83,7 @@ export function AddEventForm({
         formData.append('calendarEventId', existingEvent.calendarEventId ?? '')
         formData.append('calendarEventLink', existingEvent.calendarEventLink ?? '')
         formData.append('previousRoom', existingEvent.room ?? 'MSV Function Room')
+        formData.append('addedBy', existingEvent.addedBy ?? '')
         formData.append('removePhoto', removePhoto ? 'yes' : 'no')
       }
 

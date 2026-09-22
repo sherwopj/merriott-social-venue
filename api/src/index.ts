@@ -807,7 +807,7 @@ async function createBookingRecord(
 Reference: ${reference}
 
 Payment: ${paymentLine}
-${breakdownLines.map((line) => `  - ${line}`).join('\n')}
+${breakdownLines.map((line) => `  - ${line}`).join('\n')}${paymentIntentId ? `\n  - View payment in Stripe: ${stripePaymentDashboardUrl(paymentIntentId)}` : ''}
 
 Hirer Details:
 - Name: ${name}

@@ -533,7 +533,7 @@
   flex-wrap: wrap;
 }
 
-.manage-event-row--muted {
+.manage-event-row--muted .manage-event-row__info {
   opacity: 0.6;
 }
 

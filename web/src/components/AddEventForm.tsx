@@ -74,6 +74,7 @@ export function AddEventForm({
         method = 'PUT'
         formData.append('currentImageUrl', existingEvent.image ?? '')
         formData.append('calendarEventId', existingEvent.calendarEventId ?? '')
+        formData.append('calendarEventLink', existingEvent.calendarEventLink ?? '')
         formData.append('removePhoto', removePhoto ? 'yes' : 'no')
       }
 

@@ -22,7 +22,7 @@ const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:L1000'
 const sheetConfigured = Boolean(sheetId && serviceAccountJson)
 
 const bookingsSheetId = process.env.GOOGLE_BOOKINGS_SHEET_ID
-const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:X1000'
+const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:Y1000'
 const bookingsSheetConfigured = Boolean(bookingsSheetId && serviceAccountJson)
 
 const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID
@@ -163,6 +163,7 @@ type UpcomingEvent = {
   ticketed?: boolean
   tbc?: boolean
   calendarEventId?: string
+  calendarEventLink?: string
 }
 
 // Keyed by the Form's "Category" dropdown option (case-insensitive).
@@ -286,7 +287,7 @@ function buildCalendarEventBody(
 function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
   const events: UpcomingEvent[] = []
   rows.forEach((row, index) => {
-    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, , photoDirectUrl, calendarEventId, uid] = row
+    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, photoDirectUrl, calendarEventId, calendarEventLink, uid] = row
     if (!title || !title.trim()) return
 
     const startDate = parseSheetDate(rawStart)
@@ -315,6 +316,7 @@ function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
       ticketed: parseYesNo(ticketed) || undefined,
       tbc: parseYesNo(tbc) || undefined,
       calendarEventId: calendarEventId && calendarEventId.trim() ? calendarEventId.trim() : undefined,
+      calendarEventLink: calendarEventLink && calendarEventLink.trim() ? calendarEventLink.trim() : undefined,
     })
   })
   return events
@@ -414,6 +416,7 @@ app.post(
     const photoDirectUrl = file ? await uploadPhoto(file) : ''
 
     let calendarEventId = ''
+    let calendarEventLink = ''
     if (calendar && calendarId) {
       try {
         const created = await calendar.events.insert({
@@ -428,6 +431,7 @@ app.post(
           ),
         })
         calendarEventId = created.data.id ?? ''
+        calendarEventLink = created.data.htmlLink ?? ''
       } catch (e) {
         console.error(`[upcoming-events] Failed to create calendar event for "${title}":`, e)
       }
@@ -453,9 +457,9 @@ app.post(
             String(category).trim(),
             parseYesNo(ticketed) ? 'Yes' : 'No',
             parseYesNo(tbc) ? 'Yes' : 'No',
-            '',
             photoDirectUrl,
             calendarEventId,
+            calendarEventLink,
             uid,
           ]],
         },
@@ -483,6 +487,7 @@ app.post(
         ticketed: parseYesNo(ticketed) || undefined,
         tbc: parseYesNo(tbc) || undefined,
         calendarEventId: calendarEventId || undefined,
+        calendarEventLink: calendarEventLink || undefined,
       },
     })
   },
@@ -520,7 +525,7 @@ app.put(
 
     const {
       title, description, category, startDate, endDate, ticketed, tbc,
-      removePhoto, currentImageUrl, calendarEventId,
+      removePhoto, currentImageUrl, calendarEventId, calendarEventLink,
     } = req.body ?? {}
     const categoryInfo = category ? CATEGORY_MAP[String(category).trim().toLowerCase()] : undefined
     const parsedStartDate = typeof startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : null
@@ -545,6 +550,7 @@ app.put(
     }
 
     let finalCalendarEventId = typeof calendarEventId === 'string' ? calendarEventId.trim() : ''
+    let finalCalendarEventLink = typeof calendarEventLink === 'string' ? calendarEventLink.trim() : ''
     if (calendar && calendarId) {
       const body = buildCalendarEventBody(
         String(title).trim(),
@@ -556,16 +562,21 @@ app.put(
       )
       try {
         if (finalCalendarEventId) {
-          await calendar.events.update({ calendarId, eventId: finalCalendarEventId, requestBody: body })
+          const updatedEvent = await calendar.events.update({ calendarId, eventId: finalCalendarEventId, requestBody: body })
+          // Backfills the link on rows edited before this column existed, since the link
+          // never changes for a given event id/calendar and update() returns it for free.
+          finalCalendarEventLink = updatedEvent.data.htmlLink ?? finalCalendarEventLink
         } else {
           const created = await calendar.events.insert({ calendarId, requestBody: body })
           finalCalendarEventId = created.data.id ?? ''
+          finalCalendarEventLink = created.data.htmlLink ?? ''
         }
       } catch (e) {
         console.warn(`[upcoming-events] Calendar update failed for row ${row}, creating a fresh event instead:`, e)
         try {
           const created = await calendar.events.insert({ calendarId, requestBody: body })
           finalCalendarEventId = created.data.id ?? ''
+          finalCalendarEventLink = created.data.htmlLink ?? ''
         } catch (e2) {
           console.error(`[upcoming-events] Calendar create fallback also failed for row ${row}:`, e2)
         }
@@ -587,9 +598,9 @@ app.put(
             String(category).trim(),
             parseYesNo(ticketed) ? 'Yes' : 'No',
             parseYesNo(tbc) ? 'Yes' : 'No',
-            '',
             photoDirectUrl,
             finalCalendarEventId,
+            finalCalendarEventLink,
             uid,
           ]],
         },
@@ -618,6 +629,7 @@ app.put(
         ticketed: parseYesNo(ticketed) || undefined,
         tbc: parseYesNo(tbc) || undefined,
         calendarEventId: finalCalendarEventId || undefined,
+        calendarEventLink: finalCalendarEventLink || undefined,
       },
     })
   },
@@ -869,6 +881,7 @@ type BookingRecord = {
   barSurchargeAmount: number
   total: number
   calendarEventId?: string
+  calendarEventLink?: string
   paymentIntentId?: string
   createdBy: string
 }
@@ -877,7 +890,7 @@ function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
   const [
     , reference, status, paymentMethod, paid, date, startTime, endTime,
     eventType, attendees, exemption, barOpenTime, notes, name, email, phone, address,
-    feeAmount, depositAmount, barSurchargeAmount, total, calendarEventId, paymentIntentId, createdBy,
+    feeAmount, depositAmount, barSurchargeAmount, total, calendarEventId, calendarEventLink, paymentIntentId, createdBy,
   ] = row
   if (!reference || !reference.trim()) return null
 
@@ -903,6 +916,7 @@ function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
     barSurchargeAmount: Number(barSurchargeAmount) || 0,
     total: Number(total) || 0,
     calendarEventId: calendarEventId && calendarEventId.trim() ? calendarEventId.trim() : undefined,
+    calendarEventLink: calendarEventLink && calendarEventLink.trim() ? calendarEventLink.trim() : undefined,
     paymentIntentId: paymentIntentId && paymentIntentId.trim() ? paymentIntentId.trim() : undefined,
     createdBy: createdBy && createdBy.trim() ? createdBy.trim() : 'website',
   }
@@ -939,6 +953,7 @@ function bookingRowValues(b: {
   barSurchargeAmount: number
   total: number
   calendarEventId: string
+  calendarEventLink: string
   paymentIntentId: string
   createdBy: string
 }): string[] {
@@ -965,6 +980,7 @@ function bookingRowValues(b: {
     String(b.barSurchargeAmount),
     String(b.total),
     b.calendarEventId,
+    b.calendarEventLink,
     b.paymentIntentId,
     b.createdBy,
   ]
@@ -975,7 +991,7 @@ function bookingRowValues(b: {
 // returns it already parsed, since every admin action needs both.
 async function getBookingByReference(reference: string): Promise<{ row: number; booking: BookingRecord } | null> {
   try {
-    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:X' })
+    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:Y' })
     const rows: string[][] = response.data.values || []
     const index = rows.findIndex((row) => (row[1] ?? '').trim() === reference)
     if (index === -1) return null
@@ -1126,7 +1142,7 @@ async function createBookingRecord(
       const nextRow = await getNextEmptyBookingRow()
       await sheets.spreadsheets.values.update({
         spreadsheetId: bookingsSheetId,
-        range: `A${nextRow}:X${nextRow}`,
+        range: `A${nextRow}:Y${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [bookingRowValues({
@@ -1151,6 +1167,7 @@ async function createBookingRecord(
             barSurchargeAmount: amounts.barSurchargeAmount,
             total: amounts.total,
             calendarEventId,
+            calendarEventLink: htmlLink,
             paymentIntentId: paymentIntentId || '',
             createdBy,
           })],
@@ -1451,6 +1468,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
     barSurchargeAmount: existing.barSurchargeAmount,
     total: existing.total,
     calendarEventId: existing.calendarEventId,
+    calendarEventLink: existing.calendarEventLink,
     paymentIntentId: existing.paymentIntentId,
     createdBy: existing.createdBy,
     name: String(name).trim(),
@@ -1493,12 +1511,13 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:X${row}`,
+      range: `A${row}:Y${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
           ...updated,
           calendarEventId: updated.calendarEventId || '',
+          calendarEventLink: updated.calendarEventLink || '',
           paymentIntentId: updated.paymentIntentId || '',
         })],
       },
@@ -1554,13 +1573,14 @@ app.post('/api/admin/bookings/:reference/confirm', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:X${row}`,
+      range: `A${row}:Y${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
           ...existing,
           status: 'confirmed',
           calendarEventId: existing.calendarEventId || '',
+          calendarEventLink: existing.calendarEventLink || '',
           paymentIntentId: existing.paymentIntentId || '',
         })],
       },
@@ -1607,13 +1627,14 @@ app.delete('/api/admin/bookings/:reference', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:X${row}`,
+      range: `A${row}:Y${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
           ...existing,
           status: 'cancelled',
           calendarEventId: existing.calendarEventId || '',
+          calendarEventLink: existing.calendarEventLink || '',
           paymentIntentId: existing.paymentIntentId || '',
         })],
       },

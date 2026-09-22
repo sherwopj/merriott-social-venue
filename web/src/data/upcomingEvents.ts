@@ -20,6 +20,7 @@ export type UpcomingEvent = {
   ticketed?: boolean
   tbc?: boolean
   calendarEventId?: string
+  calendarEventLink?: string
 }
 
 export const upcomingEvents: UpcomingEvent[] = [

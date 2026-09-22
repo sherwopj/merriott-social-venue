@@ -93,6 +93,11 @@ export function ManageUpcomingEvents({
                   {ev.endDate ? ` – ${ev.endDate}` : ''}
                 </p>
                 <p className="manage-event-row__title">{ev.title}</p>
+                {ev.calendarEventLink && (
+                  <a href={ev.calendarEventLink} target="_blank" rel="noopener noreferrer" className="manage-event-row__cal-link">
+                    View in Calendar ↗
+                  </a>
+                )}
               </div>
               <div className="manage-event-row__actions">
                 <button type="button" className="btn btn--ghost" onClick={() => setEditingId(ev.id)}>

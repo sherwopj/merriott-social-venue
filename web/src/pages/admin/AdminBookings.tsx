@@ -29,6 +29,7 @@ export type Booking = {
   barSurchargeAmount: number
   total: number
   calendarEventId?: string
+  calendarEventLink?: string
   paymentIntentId?: string
   createdBy: string
 }
@@ -192,6 +193,11 @@ export function AdminBookings() {
                       {statusLabel(b.status)} · {b.paid ? 'Paid' : 'Awaiting payment'} ·{' '}
                       {EXEMPTION_LABELS[b.exemption] || b.exemption} · Total: {formatPounds(b.total)}
                     </p>
+                    {b.calendarEventLink && (
+                      <a href={b.calendarEventLink} target="_blank" rel="noopener noreferrer" className="manage-event-row__cal-link">
+                        View in Calendar ↗
+                      </a>
+                    )}
                   </div>
                   <div className="manage-event-row__actions">
                     {b.status !== 'cancelled' && (

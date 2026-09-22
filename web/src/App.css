@@ -193,6 +193,10 @@
   font-size: 0.875rem;
 }
 
+.footer-admin-entry {
+  cursor: default;
+}
+
 .sticky-book {
   position: fixed;
   right: 1rem;

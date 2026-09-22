@@ -1,10 +1,11 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   isActive ? 'nav-link nav-link--active' : 'nav-link'
 
 export function Layout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isBookingPage = location.pathname === '/book'
   const isAdminPage = location.pathname.startsWith('/admin')
 
@@ -43,7 +44,23 @@ export function Layout() {
       </main>
 
       <footer className="site-footer">
-        <p>Merriott Social Venue · Merriott, Somerset, UK</p>
+        <p>
+          <span
+            className="footer-admin-entry"
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate('/admin')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                navigate('/admin')
+              }
+            }}
+          >
+            Merriott Social Venue
+          </span>{' '}
+          · Merriott, Somerset, UK
+        </p>
       </footer>
 
       {!isBookingPage && !isAdminPage && (

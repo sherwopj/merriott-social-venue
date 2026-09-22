@@ -18,7 +18,7 @@ const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 const calendarConfigured = Boolean(calendarId && serviceAccountJson)
 
 const sheetId = process.env.GOOGLE_SHEET_ID
-const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:L1000'
+const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:M1000'
 const sheetConfigured = Boolean(sheetId && serviceAccountJson)
 
 const bookingsSheetId = process.env.GOOGLE_BOOKINGS_SHEET_ID
@@ -287,7 +287,9 @@ function buildCalendarEventBody(
 function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
   const events: UpcomingEvent[] = []
   rows.forEach((row, index) => {
-    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, photoDirectUrl, calendarEventId, calendarEventLink, uid] = row
+    // Column I (index 8) is a hidden, unused legacy column — it's tied to the Google Form
+    // that also feeds this sheet, so Sheets won't let the API delete it, only hide it.
+    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, , photoDirectUrl, calendarEventId, calendarEventLink, uid] = row
     if (!title || !title.trim()) return
 
     const startDate = parseSheetDate(rawStart)
@@ -326,9 +328,9 @@ function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
 // a row number from an earlier request, since rows shift after any delete.
 async function findRowByUid(uid: string): Promise<number | null> {
   try {
-    const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: 'A:L' })
+    const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: 'A:M' })
     const rows: string[][] = response.data.values || []
-    const index = rows.findIndex((row) => (row[11] ?? '').trim() === uid)
+    const index = rows.findIndex((row) => (row[12] ?? '').trim() === uid)
     return index === -1 ? null : index + 1 // rows[] is 0-indexed from row 1 (the header)
   } catch (e) {
     console.error(`[upcoming-events] Failed to look up row for uid ${uid}:`, e)
@@ -445,7 +447,7 @@ app.post(
       const nextRow = await getNextEmptyRow()
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `A${nextRow}:L${nextRow}`,
+        range: `A${nextRow}:M${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[
@@ -457,6 +459,7 @@ app.post(
             String(category).trim(),
             parseYesNo(ticketed) ? 'Yes' : 'No',
             parseYesNo(tbc) ? 'Yes' : 'No',
+            '',
             photoDirectUrl,
             calendarEventId,
             calendarEventLink,
@@ -586,7 +589,7 @@ app.put(
     try {
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `A${row}:L${row}`,
+        range: `A${row}:M${row}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[
@@ -598,6 +601,7 @@ app.put(
             String(category).trim(),
             parseYesNo(ticketed) ? 'Yes' : 'No',
             parseYesNo(tbc) ? 'Yes' : 'No',
+            '',
             photoDirectUrl,
             finalCalendarEventId,
             finalCalendarEventLink,

@@ -1460,6 +1460,12 @@ code {
   border-bottom: none;
 }
 
+.booking-success__row--total dt,
+.booking-success__row--total dd {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
 .booking-success__row dt {
   font-size: 0.85rem;
   color: var(--color-text-muted);

@@ -24,6 +24,8 @@ type BookingConfirmation = {
   attendees: string
   exemption: string
   notes: string
+  barOpenTime: string
+  paymentMethod: 'online' | 'in_person'
 }
 
 const EXEMPTION_LABELS: Record<string, string> = {
@@ -79,6 +81,31 @@ function formatTime(t: string) {
   return `${display}:${m}${suffix}`
 }
 
+// Hours (rounded up) between a requested earlier bar-opening time and the normal 7pm
+// opening — 0 if no time was requested, or the requested time isn't actually earlier.
+function computeBarSurchargeHours(barOpenTime: string) {
+  if (!barOpenTime) return 0
+  const [h, m] = barOpenTime.split(':').map(Number)
+  const diffMinutes = 19 * 60 - (h * 60 + m)
+  return diffMinutes > 0 ? Math.ceil(diffMinutes / 60) : 0
+}
+
+function computeAmountBreakdown(exemption: string, barOpenTime: string) {
+  const feeExempt = exemption === 'funeral' || exemption === 'charity'
+  const feeAmount = feeExempt ? 0 : 25
+  const depositAmount = 30
+  const barSurchargeHours = computeBarSurchargeHours(barOpenTime)
+  const barSurchargeAmount = barSurchargeHours * 15
+  return {
+    feeExempt,
+    feeAmount,
+    depositAmount,
+    barSurchargeHours,
+    barSurchargeAmount,
+    total: feeAmount + depositAmount + barSurchargeAmount,
+  }
+}
+
 function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1)
 }
@@ -115,6 +142,8 @@ function getDayStatus(dayStr: string, busy: BusySlot[]) {
 
 /* ── Success Screen ── */
 function BookingSuccess({ booking, onReset }: { booking: BookingConfirmation; onReset: () => void }) {
+  const amounts = computeAmountBreakdown(booking.exemption, booking.barOpenTime)
+
   return (
     <div className="booking-success">
       <div className="booking-success__icon" aria-hidden="true">✓</div>
@@ -160,6 +189,33 @@ function BookingSuccess({ booking, onReset }: { booking: BookingConfirmation; on
             </div>
           )}
         </dl>
+
+        <h3 className="booking-success__details-title" style={{ marginTop: '1.5rem' }}>Payment</h3>
+        <dl className="booking-success__dl">
+          <div className="booking-success__row">
+            <dt>Hire fee</dt>
+            <dd>{amounts.feeExempt ? 'Waived' : `£${amounts.feeAmount.toFixed(2)}`}</dd>
+          </div>
+          <div className="booking-success__row">
+            <dt>Cleaning deposit</dt>
+            <dd>£{amounts.depositAmount.toFixed(2)}</dd>
+          </div>
+          {amounts.barSurchargeAmount > 0 && (
+            <div className="booking-success__row">
+              <dt>Bar opening surcharge</dt>
+              <dd>£{amounts.barSurchargeAmount.toFixed(2)}</dd>
+            </div>
+          )}
+          <div className="booking-success__row booking-success__row--total">
+            <dt>Total</dt>
+            <dd>£{amounts.total.toFixed(2)}</dd>
+          </div>
+        </dl>
+        <p className="field-hint">
+          {booking.paymentMethod === 'online'
+            ? 'Paid online by card.'
+            : 'To be paid in person at the venue.'}
+        </p>
 
         <h3 className="booking-success__details-title" style={{ marginTop: '1.5rem' }}>Your Contact Details</h3>
         <dl className="booking-success__dl">
@@ -269,6 +325,8 @@ export function Book() {
           attendees: booking.attendees || '',
           exemption: booking.exemption || 'none',
           notes: booking.notes || '',
+          barOpenTime: booking.barOpenTime || '',
+          paymentMethod: 'online',
         })
         window.scrollTo({ top: 0, behavior: 'smooth' })
       })
@@ -286,18 +344,11 @@ export function Book() {
     return { start: toISODate(start), end: toISODate(end) }
   }, [cursor])
 
-  const feeExempt = exemption === 'funeral' || exemption === 'charity'
-
-  const barSurchargeHours = useMemo(() => {
-    if (!barNeeded || !barOpenTime) return 0
-    const [h, m] = barOpenTime.split(':').map(Number)
-    const diffMinutes = 19 * 60 - (h * 60 + m)
-    return diffMinutes > 0 ? Math.ceil(diffMinutes / 60) : 0
-  }, [barNeeded, barOpenTime])
-
-  const amountDue = useMemo(() => {
-    return (feeExempt ? 0 : 25) + 30 + barSurchargeHours * 15
-  }, [feeExempt, barSurchargeHours])
+  const amounts = useMemo(
+    () => computeAmountBreakdown(exemption, barNeeded ? barOpenTime : ''),
+    [exemption, barNeeded, barOpenTime],
+  )
+  const { feeExempt, barSurchargeHours, total: amountDue } = amounts
 
   const loadAvailability = useCallback(async () => {
     setLoading(true)
@@ -413,6 +464,8 @@ export function Book() {
         attendees,
         exemption,
         notes,
+        barOpenTime: barNeeded ? barOpenTime : '',
+        paymentMethod: 'in_person',
       })
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Something went wrong.')

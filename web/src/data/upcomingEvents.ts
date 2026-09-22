@@ -21,6 +21,7 @@ export type UpcomingEvent = {
   tbc?: boolean
   calendarEventId?: string
   calendarEventLink?: string
+  room?: 'MSV Function Room' | 'MSV Front Bar'
 }
 
 export const upcomingEvents: UpcomingEvent[] = [

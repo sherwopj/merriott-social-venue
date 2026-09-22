@@ -14,12 +14,22 @@ const app = express()
 const port = Number(process.env.PORT) || 4000
 
 const calendarId = process.env.GOOGLE_CALENDAR_ID
+const frontBarCalendarId = process.env.GOOGLE_FRONT_BAR_CALENDAR_ID
 const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 const calendarConfigured = Boolean(calendarId && serviceAccountJson)
 
 const sheetId = process.env.GOOGLE_SHEET_ID
-const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:L1000'
+const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:M1000'
 const sheetConfigured = Boolean(sheetId && serviceAccountJson)
+
+const ROOMS = ['MSV Function Room', 'MSV Front Bar'] as const
+type Room = (typeof ROOMS)[number]
+const DEFAULT_ROOM: Room = 'MSV Function Room'
+
+// Which physical space an event's Calendar entry lives on — each Room has its own calendar.
+function calendarIdForRoom(room: string | undefined): string | undefined {
+  return room === 'MSV Front Bar' ? frontBarCalendarId : calendarId
+}
 
 const bookingsSheetId = process.env.GOOGLE_BOOKINGS_SHEET_ID
 const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:Y1000'
@@ -164,6 +174,7 @@ type UpcomingEvent = {
   tbc?: boolean
   calendarEventId?: string
   calendarEventLink?: string
+  room: Room
 }
 
 // Keyed by the Form's "Category" dropdown option (case-insensitive).
@@ -287,7 +298,7 @@ function buildCalendarEventBody(
 function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
   const events: UpcomingEvent[] = []
   rows.forEach((row, index) => {
-    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, photoDirectUrl, calendarEventId, calendarEventLink, uid] = row
+    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, photoDirectUrl, calendarEventId, calendarEventLink, uid, room] = row
     if (!title || !title.trim()) return
 
     const startDate = parseSheetDate(rawStart)
@@ -317,6 +328,7 @@ function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
       tbc: parseYesNo(tbc) || undefined,
       calendarEventId: calendarEventId && calendarEventId.trim() ? calendarEventId.trim() : undefined,
       calendarEventLink: calendarEventLink && calendarEventLink.trim() ? calendarEventLink.trim() : undefined,
+      room: (ROOMS as readonly string[]).includes((room ?? '').trim()) ? (room.trim() as Room) : DEFAULT_ROOM,
     })
   })
   return events
@@ -399,9 +411,10 @@ app.post(
       return
     }
 
-    const { title, description, category, startDate, endDate, ticketed, tbc } = req.body ?? {}
+    const { title, description, category, startDate, endDate, ticketed, tbc, room } = req.body ?? {}
     const categoryInfo = category ? CATEGORY_MAP[String(category).trim().toLowerCase()] : undefined
     const parsedStartDate = typeof startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : null
+    const resolvedRoom: Room = (ROOMS as readonly string[]).includes(room) ? room : DEFAULT_ROOM
 
     if (!title || !description || !categoryInfo || !parsedStartDate) {
       res.status(400).json({
@@ -417,10 +430,11 @@ app.post(
 
     let calendarEventId = ''
     let calendarEventLink = ''
-    if (calendar && calendarId) {
+    const eventCalendarId = calendarIdForRoom(resolvedRoom)
+    if (calendar && eventCalendarId) {
       try {
         const created = await calendar.events.insert({
-          calendarId,
+          calendarId: eventCalendarId,
           requestBody: buildCalendarEventBody(
             String(title).trim(),
             String(description).trim(),
@@ -445,7 +459,7 @@ app.post(
       const nextRow = await getNextEmptyRow()
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `A${nextRow}:L${nextRow}`,
+        range: `A${nextRow}:M${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[
@@ -461,6 +475,7 @@ app.post(
             calendarEventId,
             calendarEventLink,
             uid,
+            resolvedRoom,
           ]],
         },
       })
@@ -488,6 +503,7 @@ app.post(
         tbc: parseYesNo(tbc) || undefined,
         calendarEventId: calendarEventId || undefined,
         calendarEventLink: calendarEventLink || undefined,
+        room: resolvedRoom,
       },
     })
   },
@@ -525,10 +541,12 @@ app.put(
 
     const {
       title, description, category, startDate, endDate, ticketed, tbc,
-      removePhoto, currentImageUrl, calendarEventId, calendarEventLink,
+      removePhoto, currentImageUrl, calendarEventId, calendarEventLink, room, previousRoom,
     } = req.body ?? {}
     const categoryInfo = category ? CATEGORY_MAP[String(category).trim().toLowerCase()] : undefined
     const parsedStartDate = typeof startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : null
+    const resolvedRoom: Room = (ROOMS as readonly string[]).includes(room) ? room : DEFAULT_ROOM
+    const priorRoom: Room = (ROOMS as readonly string[]).includes(previousRoom) ? previousRoom : resolvedRoom
 
     if (!title || !description || !categoryInfo || !parsedStartDate) {
       res.status(400).json({
@@ -551,7 +569,9 @@ app.put(
 
     let finalCalendarEventId = typeof calendarEventId === 'string' ? calendarEventId.trim() : ''
     let finalCalendarEventLink = typeof calendarEventLink === 'string' ? calendarEventLink.trim() : ''
-    if (calendar && calendarId) {
+    const targetCalendarId = calendarIdForRoom(resolvedRoom)
+    const priorCalendarId = calendarIdForRoom(priorRoom)
+    if (calendar && targetCalendarId) {
       const body = buildCalendarEventBody(
         String(title).trim(),
         String(description).trim(),
@@ -561,20 +581,26 @@ app.put(
         parsedEndDate,
       )
       try {
-        if (finalCalendarEventId) {
-          const updatedEvent = await calendar.events.update({ calendarId, eventId: finalCalendarEventId, requestBody: body })
+        if (finalCalendarEventId && priorCalendarId && priorCalendarId !== targetCalendarId) {
+          // Room changed — the Calendar API moves an event between calendars in its own
+          // call, keeping the same event id, then the details are updated separately.
+          await calendar.events.move({ calendarId: priorCalendarId, eventId: finalCalendarEventId, destination: targetCalendarId })
+          const updatedEvent = await calendar.events.update({ calendarId: targetCalendarId, eventId: finalCalendarEventId, requestBody: body })
+          finalCalendarEventLink = updatedEvent.data.htmlLink ?? finalCalendarEventLink
+        } else if (finalCalendarEventId) {
+          const updatedEvent = await calendar.events.update({ calendarId: targetCalendarId, eventId: finalCalendarEventId, requestBody: body })
           // Backfills the link on rows edited before this column existed, since the link
           // never changes for a given event id/calendar and update() returns it for free.
           finalCalendarEventLink = updatedEvent.data.htmlLink ?? finalCalendarEventLink
         } else {
-          const created = await calendar.events.insert({ calendarId, requestBody: body })
+          const created = await calendar.events.insert({ calendarId: targetCalendarId, requestBody: body })
           finalCalendarEventId = created.data.id ?? ''
           finalCalendarEventLink = created.data.htmlLink ?? ''
         }
       } catch (e) {
         console.warn(`[upcoming-events] Calendar update failed for row ${row}, creating a fresh event instead:`, e)
         try {
-          const created = await calendar.events.insert({ calendarId, requestBody: body })
+          const created = await calendar.events.insert({ calendarId: targetCalendarId, requestBody: body })
           finalCalendarEventId = created.data.id ?? ''
           finalCalendarEventLink = created.data.htmlLink ?? ''
         } catch (e2) {
@@ -586,7 +612,7 @@ app.put(
     try {
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `A${row}:L${row}`,
+        range: `A${row}:M${row}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[
@@ -602,6 +628,7 @@ app.put(
             finalCalendarEventId,
             finalCalendarEventLink,
             uid,
+            resolvedRoom,
           ]],
         },
       })
@@ -630,6 +657,7 @@ app.put(
         tbc: parseYesNo(tbc) || undefined,
         calendarEventId: finalCalendarEventId || undefined,
         calendarEventLink: finalCalendarEventLink || undefined,
+        room: resolvedRoom,
       },
     })
   },
@@ -653,11 +681,12 @@ app.delete('/api/upcoming-events/:id', async (req, res) => {
     return
   }
 
-  const { calendarEventId, imageUrl } = req.body ?? {}
+  const { calendarEventId, imageUrl, room } = req.body ?? {}
+  const deleteCalendarId = calendarIdForRoom((ROOMS as readonly string[]).includes(room) ? room : undefined)
 
-  if (calendar && calendarId && typeof calendarEventId === 'string' && calendarEventId) {
+  if (calendar && deleteCalendarId && typeof calendarEventId === 'string' && calendarEventId) {
     try {
-      await calendar.events.delete({ calendarId, eventId: calendarEventId })
+      await calendar.events.delete({ calendarId: deleteCalendarId, eventId: calendarEventId })
     } catch (e) {
       console.warn(`[upcoming-events] Failed to delete calendar event for row ${row} (continuing):`, e)
     }

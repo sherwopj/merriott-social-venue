@@ -48,7 +48,7 @@ export function ManageUpcomingEvents({
       const res = await fetch(apiUrl(`/api/upcoming-events/${ev.id}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ calendarEventId: ev.calendarEventId, imageUrl: ev.image }),
+        body: JSON.stringify({ calendarEventId: ev.calendarEventId, imageUrl: ev.image, room: ev.room }),
       })
       if (!res.ok) {
         if (res.status === 401) {
@@ -93,6 +93,7 @@ export function ManageUpcomingEvents({
                   {ev.endDate ? ` – ${ev.endDate}` : ''}
                 </p>
                 <p className="manage-event-row__title">{ev.title}</p>
+                <p className="manage-event-row__date">{ev.room ?? 'MSV Function Room'}</p>
                 {ev.calendarEventLink && (
                   <a href={ev.calendarEventLink} target="_blank" rel="noopener noreferrer" className="manage-event-row__cal-link">
                     View in Calendar ↗

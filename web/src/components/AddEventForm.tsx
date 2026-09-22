@@ -13,6 +13,8 @@ const CATEGORY_OPTIONS = [
   'Community / Volunteering',
 ]
 
+const ROOM_OPTIONS = ['MSV Function Room', 'MSV Front Bar'] as const
+
 function resolveInitialCategory(existingEvent?: UpcomingEvent): string {
   const match = CATEGORY_OPTIONS.find(
     (opt) => opt.toLowerCase() === (existingEvent?.category ?? '').toLowerCase(),
@@ -36,6 +38,7 @@ export function AddEventForm({
   const [title, setTitle] = useState(existingEvent?.title ?? '')
   const [description, setDescription] = useState(existingEvent?.description ?? '')
   const [category, setCategory] = useState(() => resolveInitialCategory(existingEvent))
+  const [room, setRoom] = useState<(typeof ROOM_OPTIONS)[number]>(existingEvent?.room ?? 'MSV Function Room')
   const [startDate, setStartDate] = useState(existingEvent?.startDate ?? '')
   const [endDate, setEndDate] = useState(existingEvent?.endDate ?? '')
   const [ticketed, setTicketed] = useState(existingEvent?.ticketed ?? false)
@@ -61,6 +64,7 @@ export function AddEventForm({
       formData.append('title', title)
       formData.append('description', description)
       formData.append('category', category)
+      formData.append('room', room)
       formData.append('startDate', startDate)
       if (endDate) formData.append('endDate', endDate)
       formData.append('ticketed', ticketed ? 'yes' : 'no')
@@ -75,6 +79,7 @@ export function AddEventForm({
         formData.append('currentImageUrl', existingEvent.image ?? '')
         formData.append('calendarEventId', existingEvent.calendarEventId ?? '')
         formData.append('calendarEventLink', existingEvent.calendarEventLink ?? '')
+        formData.append('previousRoom', existingEvent.room ?? 'MSV Function Room')
         formData.append('removePhoto', removePhoto ? 'yes' : 'no')
       }
 
@@ -102,6 +107,7 @@ export function AddEventForm({
         setTitle('')
         setDescription('')
         setCategory(CATEGORY_OPTIONS[0])
+        setRoom('MSV Function Room')
         setStartDate('')
         setEndDate('')
         setTicketed(false)
@@ -147,6 +153,17 @@ export function AddEventForm({
         <span>Category</span>
         <select value={category} onChange={(e) => setCategory(e.target.value)}>
           {CATEGORY_OPTIONS.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="field">
+        <span>Room</span>
+        <select value={room} onChange={(e) => setRoom(e.target.value as (typeof ROOM_OPTIONS)[number])}>
+          {ROOM_OPTIONS.map((opt) => (
             <option key={opt} value={opt}>
               {opt}
             </option>

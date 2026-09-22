@@ -21,7 +21,7 @@ export function Layout() {
               Home
             </NavLink>
             <NavLink to="/events" className={navLinkClass}>
-              Events
+              What's On
             </NavLink>
             <NavLink to="/team" className={navLinkClass}>
               <span className="nav-text-desktop">Meet the team</span>

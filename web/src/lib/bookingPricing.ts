@@ -5,20 +5,32 @@ export const EXEMPTION_LABELS: Record<string, string> = {
   charity: 'Charity Event',
 }
 
-// Hours (rounded up) between a requested earlier bar-opening time and the normal 7pm
-// opening — 0 if no time was requested, or the requested time isn't actually earlier.
-export function computeBarSurchargeHours(barOpenTime: string) {
+const BAR_NORMAL_OPEN_MINUTES = 19 * 60 // the bar normally opens at 7pm
+
+// Hours (rounded up) of early bar opening requested — only the portion of the requested
+// barOpenTime–barCloseTime range that falls before the bar's normal 7pm opening is charged,
+// so a request that runs past 7pm is capped there rather than billing normal hours too.
+export function computeBarSurchargeHours(barOpenTime: string, barCloseTime: string) {
   if (!barOpenTime) return 0
-  const [h, m] = barOpenTime.split(':').map(Number)
-  const diffMinutes = 19 * 60 - (h * 60 + m)
+  const [sh, sm] = barOpenTime.split(':').map(Number)
+  const startMinutes = sh * 60 + sm
+  if (startMinutes >= BAR_NORMAL_OPEN_MINUTES) return 0
+
+  let endMinutes = BAR_NORMAL_OPEN_MINUTES
+  if (barCloseTime) {
+    const [eh, em] = barCloseTime.split(':').map(Number)
+    endMinutes = Math.min(eh * 60 + em, BAR_NORMAL_OPEN_MINUTES)
+  }
+
+  const diffMinutes = endMinutes - startMinutes
   return diffMinutes > 0 ? Math.ceil(diffMinutes / 60) : 0
 }
 
-export function computeAmountBreakdown(exemption: string, barOpenTime: string) {
+export function computeAmountBreakdown(exemption: string, barOpenTime: string, barCloseTime: string) {
   const feeExempt = exemption === 'funeral' || exemption === 'charity'
   const feeAmount = feeExempt ? 0 : 25
   const depositAmount = 30
-  const barSurchargeHours = computeBarSurchargeHours(barOpenTime)
+  const barSurchargeHours = computeBarSurchargeHours(barOpenTime, barCloseTime)
   const barSurchargeAmount = barSurchargeHours * 15
   return {
     feeExempt,

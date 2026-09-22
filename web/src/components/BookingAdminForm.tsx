@@ -1,7 +1,8 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
 import { EXEMPTION_LABELS, computeAmountBreakdown } from '../lib/bookingPricing'
 import { SlotAvailabilityCalendar } from './SlotAvailabilityCalendar'
+import { InfoTip } from './InfoTip'
 import type { Booking } from '../pages/admin/AdminBookings'
 
 export function BookingAdminForm({
@@ -31,17 +32,31 @@ export function BookingAdminForm({
   const [exemption, setExemption] = useState(existingBooking?.exemption ?? 'none')
   const [barNeeded, setBarNeeded] = useState(Boolean(existingBooking?.barOpenTime))
   const [barOpenTime, setBarOpenTime] = useState(existingBooking?.barOpenTime ?? '')
+  const [barCloseTime, setBarCloseTime] = useState(existingBooking?.barCloseTime || '19:00')
+  const [barTimeError, setBarTimeError] = useState<string | null>(null)
   const [notes, setNotes] = useState(existingBooking?.notes ?? '')
   const [paid, setPaid] = useState(existingBooking?.paid ?? false)
   const [confirmed, setConfirmed] = useState(existingBooking?.status === 'confirmed')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const amounts = computeAmountBreakdown(exemption, barNeeded ? barOpenTime : '')
+  const amounts = computeAmountBreakdown(exemption, barNeeded ? barOpenTime : '', barNeeded ? barCloseTime : '')
+
+  useEffect(() => {
+    if (!barNeeded) {
+      setBarTimeError(null)
+      return
+    }
+    setBarTimeError(barCloseTime <= barOpenTime ? 'Bar closing time must be later than the opening time.' : null)
+  }, [barNeeded, barOpenTime, barCloseTime])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
+    if (barNeeded && barTimeError) {
+      setError(barTimeError)
+      return
+    }
     setSubmitting(true)
     try {
       const url = isEditing
@@ -50,10 +65,11 @@ export function BookingAdminForm({
 
       const body: Record<string, unknown> = { name, email, phone, address, date, startTime, endTime, eventType, attendees, notes, confirmed }
       if (!isEditing) {
-        // Exemption and bar-opening time are only ever set at creation — editing an existing
+        // Exemption and bar-opening times are only ever set at creation — editing an existing
         // booking can't change them, since they determine the price.
         body.exemption = exemption
         body.barOpenTime = barNeeded ? barOpenTime : ''
+        body.barCloseTime = barNeeded ? barCloseTime : ''
         // Admin-entered bookings are always recorded as taken in person by a committee
         // member — there's no Stripe Checkout step here, unlike the public booking form.
         body.paymentMethod = 'in_person'
@@ -129,32 +145,71 @@ export function BookingAdminForm({
             <span>Bar Opening</span>
             <p className="field-hint">
               {existingBooking?.barOpenTime
-                ? `Requested for ${existingBooking.barOpenTime} — locked, since it determines the price.`
+                ? `Requested for ${existingBooking.barOpenTime}–${existingBooking.barCloseTime || '19:00'} — locked, since it determines the price.`
                 : 'Not requested.'}
             </p>
           </div>
         ) : (
           <div className="field">
-            <span>Bar Opening</span>
+            <span>
+              Bar Opening
+              <InfoTip label="Bar opening charges">
+                The bar normally opens at 7pm. Opening it earlier is charged at £15 per hour (or part hour)
+                for the time between the start time and 7pm — whichever is earlier out of the closing time
+                and 7pm. As with the hire fee, the committee may refund some or all of this at their
+                discretion for larger events.
+              </InfoTip>
+            </span>
             <label className="checkbox-field">
               <input
                 type="checkbox"
                 checked={barNeeded}
                 onChange={(e) => {
                   setBarNeeded(e.target.checked)
-                  if (!e.target.checked) setBarOpenTime('')
-                  else if (!barOpenTime) setBarOpenTime('16:00')
+                  if (!e.target.checked) {
+                    setBarOpenTime('')
+                    setBarCloseTime('19:00')
+                  } else if (!barOpenTime) {
+                    setBarOpenTime('16:00')
+                  }
                 }}
               />
-              <span>I need the bar open before 7pm</span>
+              <span>Bar open before 7pm</span>
             </label>
             {barNeeded && (
-              <input
-                type="time"
-                value={barOpenTime}
-                onChange={(e) => setBarOpenTime(e.target.value)}
-                aria-label="Requested bar opening time"
-              />
+              <>
+                <div className="field-row">
+                  <label className="field">
+                    <span>Bar Start Time</span>
+                    <input
+                      type="time"
+                      value={barOpenTime}
+                      onChange={(e) => setBarOpenTime(e.target.value)}
+                      aria-label="Requested bar opening time"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Bar End Time</span>
+                    <input
+                      type="time"
+                      value={barCloseTime}
+                      onChange={(e) => setBarCloseTime(e.target.value)}
+                      aria-label="Requested bar closing time"
+                    />
+                  </label>
+                </div>
+                {barTimeError ? (
+                  <p className="error-text">{barTimeError}</p>
+                ) : (
+                  amounts.barSurchargeAmount > 0 && (
+                    <p className="field-hint">
+                      {amounts.barSurchargeHours} hour{amounts.barSurchargeHours === 1 ? '' : 's'} before the
+                      normal 7pm opening — £{amounts.barSurchargeAmount.toFixed(2)} bar surcharge. May be
+                      refunded at committee discretion for larger events.
+                    </p>
+                  )
+                )}
+              </>
             )}
           </div>
         )}

@@ -1,8 +1,9 @@
-import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiUrl } from '../lib/apiBase'
 import { EXEMPTION_LABELS, computeAmountBreakdown } from '../lib/bookingPricing'
 import { SlotAvailabilityCalendar } from '../components/SlotAvailabilityCalendar'
+import { InfoTip } from '../components/InfoTip'
 import functionRoomHirePdf from '../assets/MSV_Function_Room_Hire_Policy_and_Form.pdf'
 
 type BookingConfirmation = {
@@ -20,42 +21,12 @@ type BookingConfirmation = {
   exemption: string
   notes: string
   barOpenTime: string
+  barCloseTime: string
   paymentMethod: 'online' | 'in_person'
 }
 
 
 const EMAIL_ADDRESS = 'merriottsocialvenue@gmail.com'
-
-function InfoTip({ label, children }: { label: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLSpanElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function handleOutsideClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleOutsideClick)
-    return () => document.removeEventListener('mousedown', handleOutsideClick)
-  }, [open])
-
-  return (
-    <span className="info-tip" ref={containerRef}>
-      <button
-        type="button"
-        className="info-tip__button"
-        aria-label={label}
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        i
-      </button>
-      {open && <span className="info-tip__panel" role="tooltip">{children}</span>}
-    </span>
-  )
-}
 
 function formatDate(iso: string) {
   const d = new Date(iso + 'T12:00:00')
@@ -72,7 +43,7 @@ function formatTime(t: string) {
 
 /* ── Success Screen ── */
 function BookingSuccess({ booking, onReset }: { booking: BookingConfirmation; onReset: () => void }) {
-  const amounts = computeAmountBreakdown(booking.exemption, booking.barOpenTime)
+  const amounts = computeAmountBreakdown(booking.exemption, booking.barOpenTime, booking.barCloseTime)
 
   return (
     <div className="booking-success">
@@ -213,6 +184,8 @@ export function Book() {
   const [attendees, setAttendees] = useState('')
   const [barNeeded, setBarNeeded] = useState(false)
   const [barOpenTime, setBarOpenTime] = useState('')
+  const [barCloseTime, setBarCloseTime] = useState('19:00')
+  const [barTimeError, setBarTimeError] = useState<string | null>(null)
   const [exemption, setExemption] = useState('none')
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'in_person'>('online')
   const [declaration, setDeclaration] = useState(false)
@@ -252,6 +225,7 @@ export function Book() {
           exemption: booking.exemption || 'none',
           notes: booking.notes || '',
           barOpenTime: booking.barOpenTime || '',
+          barCloseTime: booking.barCloseTime || '',
           paymentMethod: 'online',
         })
         window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -265,10 +239,19 @@ export function Book() {
   }, [])
 
   const amounts = useMemo(
-    () => computeAmountBreakdown(exemption, barNeeded ? barOpenTime : ''),
-    [exemption, barNeeded, barOpenTime],
+    () => computeAmountBreakdown(exemption, barNeeded ? barOpenTime : '', barNeeded ? barCloseTime : ''),
+    [exemption, barNeeded, barOpenTime, barCloseTime],
   )
   const { feeExempt, barSurchargeHours, total: amountDue } = amounts
+
+  // Keep the bar-open time range sane as either field changes.
+  useEffect(() => {
+    if (!barNeeded) {
+      setBarTimeError(null)
+      return
+    }
+    setBarTimeError(barCloseTime <= barOpenTime ? 'Bar closing time must be later than the opening time.' : null)
+  }, [barNeeded, barOpenTime, barCloseTime])
 
   function selectSlot(date: string, type: 'day' | 'evening', startT: string, endT: string) {
     setSelectedSlot({ date, type })
@@ -285,6 +268,10 @@ export function Book() {
       setSlotMissing(true)
       setSubmitError('Please choose an available day or evening slot.')
       selectedSlotFieldRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    if (barNeeded && barTimeError) {
+      setSubmitError(barTimeError)
       return
     }
     setSubmitting(true)
@@ -310,6 +297,7 @@ export function Book() {
           sendCopyToHirer: sendCopy,
           notes,
           barOpenTime: barNeeded ? barOpenTime : '',
+          barCloseTime: barNeeded ? barCloseTime : '',
         }),
       })
       const body = (await res.json().catch(() => ({}))) as { ok?: boolean; url?: string; reference?: string; error?: string }
@@ -341,6 +329,7 @@ export function Book() {
         exemption,
         notes,
         barOpenTime: barNeeded ? barOpenTime : '',
+        barCloseTime: barNeeded ? barCloseTime : '',
         paymentMethod: 'in_person',
       })
     } catch (err) {
@@ -363,6 +352,8 @@ export function Book() {
     setAttendees('')
     setBarNeeded(false)
     setBarOpenTime('')
+    setBarCloseTime('19:00')
+    setBarTimeError(null)
     setExemption('none')
     setDeclaration(false)
     setNotes('')
@@ -481,8 +472,10 @@ export function Book() {
                   <span>
                     Bar Opening
                     <InfoTip label="Bar opening charges">
-                      The bar normally opens at 7pm. If you need it open earlier, that's charged at £15 per hour (or
-                      part hour) before 7pm, payable upfront along with the hire fee and deposit.
+                      The bar normally opens at 7pm. Opening it earlier is charged at £15 per hour (or part hour)
+                      for the time between your requested start time and 7pm — whichever is earlier out of your
+                      closing time and 7pm. Payable upfront along with the hire fee and deposit. As with the hire
+                      fee, the committee may refund some or all of this at their discretion for larger events.
                     </InfoTip>
                   </span>
                   <label className="checkbox-field">
@@ -491,25 +484,48 @@ export function Book() {
                       checked={barNeeded}
                       onChange={(e) => {
                         setBarNeeded(e.target.checked)
-                        if (!e.target.checked) setBarOpenTime('')
-                        else if (!barOpenTime) setBarOpenTime('16:00')
+                        if (!e.target.checked) {
+                          setBarOpenTime('')
+                          setBarCloseTime('19:00')
+                        } else if (!barOpenTime) {
+                          setBarOpenTime('16:00')
+                        }
                       }}
                     />
                     <span>I need the bar open before 7pm</span>
                   </label>
                   {barNeeded && (
                     <>
-                      <input
-                        type="time"
-                        value={barOpenTime}
-                        onChange={(e) => setBarOpenTime(e.target.value)}
-                        aria-label="Requested bar opening time"
-                      />
-                      {barSurchargeHours > 0 && (
-                        <p className="field-hint">
-                          {barSurchargeHours} hour{barSurchargeHours === 1 ? '' : 's'} before the normal 7pm opening
-                          — £{(barSurchargeHours * 15).toFixed(2)} bar surcharge added below.
-                        </p>
+                      <div className="field-row">
+                        <label className="field">
+                          <span>Bar Start Time</span>
+                          <input
+                            type="time"
+                            value={barOpenTime}
+                            onChange={(e) => setBarOpenTime(e.target.value)}
+                            aria-label="Requested bar opening time"
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Bar End Time</span>
+                          <input
+                            type="time"
+                            value={barCloseTime}
+                            onChange={(e) => setBarCloseTime(e.target.value)}
+                            aria-label="Requested bar closing time"
+                          />
+                        </label>
+                      </div>
+                      {barTimeError ? (
+                        <p className="error-text">{barTimeError}</p>
+                      ) : (
+                        barSurchargeHours > 0 && (
+                          <p className="field-hint">
+                            {barSurchargeHours} hour{barSurchargeHours === 1 ? '' : 's'} before the normal 7pm opening
+                            — £{(barSurchargeHours * 15).toFixed(2)} bar surcharge added below. May be refunded at
+                            committee discretion for larger events.
+                          </p>
+                        )
                       )}
                     </>
                   )}

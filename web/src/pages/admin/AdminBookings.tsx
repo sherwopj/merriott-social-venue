@@ -19,6 +19,7 @@ export type Booking = {
   attendees: string
   exemption: string
   barOpenTime: string
+  barCloseTime: string
   notes: string
   name: string
   email: string

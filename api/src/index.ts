@@ -32,7 +32,7 @@ function calendarIdForRoom(room: string | undefined): string | undefined {
 }
 
 const bookingsSheetId = process.env.GOOGLE_BOOKINGS_SHEET_ID
-const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:Z1000'
+const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:AA1000'
 const bookingsSheetConfigured = Boolean(bookingsSheetId && serviceAccountJson)
 
 const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID
@@ -868,6 +868,7 @@ type BookingFields = {
   notes?: string
   sendCopyToHirer?: boolean
   barOpenTime?: string
+  barCloseTime?: string
 }
 
 const BAR_NORMAL_OPEN_MINUTES = 19 * 60 // the bar normally opens at 7pm
@@ -876,20 +877,30 @@ function formatPounds(pence: number): string {
   return `£${(pence / 100).toFixed(2)}`
 }
 
-// Hours (rounded up) between a requested earlier bar-opening time and the normal 7pm
-// opening — 0 if no time was requested, or the requested time isn't actually earlier.
-function computeBarSurchargeHours(barOpenTime: string | undefined): number {
+// Hours (rounded up) of early bar opening requested — only the portion of the requested
+// barOpenTime–barCloseTime range that falls before the bar's normal 7pm opening is charged,
+// so a request that runs past 7pm is capped there rather than billing normal hours too.
+function computeBarSurchargeHours(barOpenTime: string | undefined, barCloseTime: string | undefined): number {
   if (!barOpenTime || !/^\d{1,2}:\d{2}$/.test(barOpenTime)) return 0
-  const [h, m] = barOpenTime.split(':').map(Number)
-  const diffMinutes = BAR_NORMAL_OPEN_MINUTES - (h * 60 + m)
+  const [sh, sm] = barOpenTime.split(':').map(Number)
+  const startMinutes = sh * 60 + sm
+  if (startMinutes >= BAR_NORMAL_OPEN_MINUTES) return 0
+
+  let endMinutes = BAR_NORMAL_OPEN_MINUTES
+  if (barCloseTime && /^\d{1,2}:\d{2}$/.test(barCloseTime)) {
+    const [eh, em] = barCloseTime.split(':').map(Number)
+    endMinutes = Math.min(eh * 60 + em, BAR_NORMAL_OPEN_MINUTES)
+  }
+
+  const diffMinutes = endMinutes - startMinutes
   return diffMinutes > 0 ? Math.ceil(diffMinutes / 60) : 0
 }
 
-function computeAmountDue(exemption: string | undefined, barOpenTime: string | undefined) {
+function computeAmountDue(exemption: string | undefined, barOpenTime: string | undefined, barCloseTime: string | undefined) {
   const feeExempt = exemption === 'funeral' || exemption === 'charity'
   const feeAmount = feeExempt ? 0 : 2500
   const depositAmount = 3000
-  const barSurchargeHours = computeBarSurchargeHours(barOpenTime)
+  const barSurchargeHours = computeBarSurchargeHours(barOpenTime, barCloseTime)
   const barSurchargeAmount = barSurchargeHours * 1500
   return {
     feeExempt,
@@ -901,7 +912,11 @@ function computeAmountDue(exemption: string | undefined, barOpenTime: string | u
   }
 }
 
-function formatAmountBreakdown(amounts: ReturnType<typeof computeAmountDue>, barOpenTime: string | undefined): string[] {
+function formatAmountBreakdown(
+  amounts: ReturnType<typeof computeAmountDue>,
+  barOpenTime: string | undefined,
+  barCloseTime: string | undefined,
+): string[] {
   const lines = [
     `Hire fee: ${amounts.feeExempt ? 'Waived' : formatPounds(amounts.feeAmount)}`,
     `Cleaning deposit: ${formatPounds(amounts.depositAmount)}`,
@@ -909,7 +924,7 @@ function formatAmountBreakdown(amounts: ReturnType<typeof computeAmountDue>, bar
   if (amounts.barSurchargeAmount > 0) {
     const hourWord = amounts.barSurchargeHours === 1 ? 'hour' : 'hours'
     lines.push(
-      `Bar opening surcharge: ${formatPounds(amounts.barSurchargeAmount)} (requested ${barOpenTime}, ${amounts.barSurchargeHours} ${hourWord} before the normal 7pm opening)`,
+      `Bar opening surcharge: ${formatPounds(amounts.barSurchargeAmount)} (requested ${barOpenTime}–${barCloseTime || '19:00'}, ${amounts.barSurchargeHours} ${hourWord} before the normal 7pm opening)`,
     )
   }
   lines.push(`Total: ${formatPounds(amounts.total)}`)
@@ -997,6 +1012,7 @@ type BookingRecord = {
   attendees: string
   exemption: string
   barOpenTime: string
+  barCloseTime: string
   notes: string
   name: string
   email: string
@@ -1018,7 +1034,7 @@ function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
     , reference, status, paymentMethod, paid, date, startTime, endTime,
     eventType, attendees, exemption, barOpenTime, notes, name, email, phone, address,
     feeAmount, depositAmount, barSurchargeAmount, total, calendarEventId, calendarEventLink, paymentIntentId, createdBy,
-    lastUpdatedBy,
+    lastUpdatedBy, barCloseTime,
   ] = row
   if (!reference || !reference.trim()) return null
 
@@ -1034,6 +1050,7 @@ function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
     attendees: attendees ?? '',
     exemption: exemption && exemption.trim() ? exemption.trim() : 'none',
     barOpenTime: barOpenTime ?? '',
+    barCloseTime: barCloseTime ?? '',
     notes: notes ?? '',
     name: name ?? '',
     email: email ?? '',
@@ -1072,6 +1089,7 @@ function bookingRowValues(b: {
   attendees: string | number | undefined
   exemption: string
   barOpenTime: string
+  barCloseTime: string
   notes: string
   name: string
   email: string
@@ -1114,6 +1132,7 @@ function bookingRowValues(b: {
     b.paymentIntentId,
     b.createdBy,
     b.lastUpdatedBy,
+    b.barCloseTime,
   ]
 }
 
@@ -1122,7 +1141,7 @@ function bookingRowValues(b: {
 // returns it already parsed, since every admin action needs both.
 async function getBookingByReference(reference: string): Promise<{ row: number; booking: BookingRecord } | null> {
   try {
-    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:Z' })
+    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:AA' })
     const rows: string[][] = response.data.values || []
     const index = rows.findIndex((row) => (row[1] ?? '').trim() === reference)
     if (index === -1) return null
@@ -1162,9 +1181,9 @@ async function createBookingRecord(
     notifyCommittee = true,
     status = 'provisional',
   } = options
-  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, sendCopyToHirer, barOpenTime } = fields
-  const amounts = computeAmountDue(exemption, barOpenTime)
-  const breakdownLines = formatAmountBreakdown(amounts, barOpenTime)
+  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, sendCopyToHirer, barOpenTime, barCloseTime } = fields
+  const amounts = computeAmountDue(exemption, barOpenTime, barCloseTime)
+  const breakdownLines = formatAmountBreakdown(amounts, barOpenTime, barCloseTime)
   const paymentLine = paymentStatusLine(paymentMethod, paid, amounts.total)
   const paymentStatusTag = paid ? 'PAID' : 'AWAITING PAYMENT'
 
@@ -1273,7 +1292,7 @@ async function createBookingRecord(
       const nextRow = await getNextEmptyBookingRow()
       await sheets.spreadsheets.values.update({
         spreadsheetId: bookingsSheetId,
-        range: `A${nextRow}:Z${nextRow}`,
+        range: `A${nextRow}:AA${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [bookingRowValues({
@@ -1288,6 +1307,7 @@ async function createBookingRecord(
             attendees,
             exemption: exemption || 'none',
             barOpenTime: barOpenTime || '',
+            barCloseTime: barCloseTime || '',
             notes: notes || '',
             name,
             email,
@@ -1332,6 +1352,7 @@ app.post('/api/bookings', async (req, res) => {
     sendCopyToHirer,
     paymentMethod,
     barOpenTime,
+    barCloseTime,
   } = req.body ?? {}
 
   // Honeypot anti-spam check
@@ -1357,6 +1378,7 @@ app.post('/api/bookings', async (req, res) => {
     name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes,
     sendCopyToHirer: Boolean(sendCopyToHirer),
     barOpenTime: barOpenTime || undefined,
+    barCloseTime: barCloseTime || undefined,
   }
 
   if (paymentMethod === 'in_person') {
@@ -1370,7 +1392,7 @@ app.post('/api/bookings', async (req, res) => {
     return
   }
 
-  const amounts = computeAmountDue(exemption, barOpenTime)
+  const amounts = computeAmountDue(exemption, barOpenTime, barCloseTime)
 
   try {
     const siteOrigin = webOrigins[0] || 'https://merriottsocialvenue.co.uk'
@@ -1410,6 +1432,7 @@ app.post('/api/bookings', async (req, res) => {
         notes: String(notes || '').slice(0, 450),
         sendCopyToHirer: sendCopyToHirer ? 'yes' : 'no',
         barOpenTime: barOpenTime || '',
+        barCloseTime: barCloseTime || '',
       },
     })
     res.json({ ok: true, url: session.url })
@@ -1476,6 +1499,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         notes: metadata.notes,
         sendCopyToHirer: metadata.sendCopyToHirer === 'yes',
         barOpenTime: metadata.barOpenTime || undefined,
+        barCloseTime: metadata.barCloseTime || undefined,
       }
       const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
       await createBookingRecord(fields, metadata.reference ?? session.id, 'online', { paymentIntentId })
@@ -1518,7 +1542,7 @@ app.post('/api/admin/bookings', async (req, res) => {
 
   const {
     name, email, phone, address, date, startTime, endTime, eventType, attendees,
-    exemption, notes, barOpenTime, paymentMethod, paid, confirmed,
+    exemption, notes, barOpenTime, barCloseTime, paymentMethod, paid, confirmed,
   } = req.body ?? {}
 
   if (!name || !email || !phone || !date) {
@@ -1535,6 +1559,7 @@ app.post('/api/admin/bookings', async (req, res) => {
     name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes,
     sendCopyToHirer: false,
     barOpenTime: barOpenTime || undefined,
+    barCloseTime: barCloseTime || undefined,
   }
 
   await createBookingRecord(fields, reference, paymentMethod, {
@@ -1558,11 +1583,11 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
     return
   }
 
-  // Exemption and bar-opening time determine the price, so editing is refused if either is
+  // Exemption and bar-opening times determine the price, so editing is refused if any are
   // present — the UI never sends them, but the server enforces it independently too.
-  if (req.body && ('exemption' in req.body || 'barOpenTime' in req.body)) {
+  if (req.body && ('exemption' in req.body || 'barOpenTime' in req.body || 'barCloseTime' in req.body)) {
     res.status(400).json({
-      error: "Exemption status and bar-opening time can't be edited — they determine the price. Cancel and create a new booking instead.",
+      error: "Exemption status and bar-opening times can't be edited — they determine the price. Cancel and create a new booking instead.",
     })
     return
   }
@@ -1594,6 +1619,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
     paid: existing.paid,
     exemption: existing.exemption,
     barOpenTime: existing.barOpenTime,
+    barCloseTime: existing.barCloseTime,
     feeAmount: existing.feeAmount,
     depositAmount: existing.depositAmount,
     barSurchargeAmount: existing.barSurchargeAmount,
@@ -1617,8 +1643,8 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
 
   if (calendar && calendarId && existing.calendarEventId) {
     try {
-      const amounts = computeAmountDue(existing.exemption, existing.barOpenTime)
-      const breakdownLines = formatAmountBreakdown(amounts, existing.barOpenTime)
+      const amounts = computeAmountDue(existing.exemption, existing.barOpenTime, existing.barCloseTime)
+      const breakdownLines = formatAmountBreakdown(amounts, existing.barOpenTime, existing.barCloseTime)
       const paymentLine = paymentStatusLine(existing.paymentMethod, existing.paid, existing.total)
       await calendar.events.update({
         calendarId,
@@ -1643,7 +1669,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:Z${row}`,
+      range: `A${row}:AA${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
@@ -1706,7 +1732,7 @@ app.post('/api/admin/bookings/:reference/confirm', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:Z${row}`,
+      range: `A${row}:AA${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
@@ -1761,7 +1787,7 @@ app.delete('/api/admin/bookings/:reference', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:Z${row}`,
+      range: `A${row}:AA${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({

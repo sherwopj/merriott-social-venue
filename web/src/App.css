@@ -848,8 +848,8 @@
 }
 
 .cal-slot--selected {
-  background: var(--color-accent) !important;
-  color: var(--color-bg) !important;
+  background: #e30b5d !important;
+  color: #ffffff !important;
 }
 
 .cal-legend {
@@ -889,7 +889,7 @@
 }
 
 .cal-legend__box--selected {
-  background: var(--color-accent);
+  background: #e30b5d;
 }
 
 .btn {

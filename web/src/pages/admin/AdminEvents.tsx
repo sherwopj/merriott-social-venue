@@ -11,10 +11,9 @@ export function AdminEvents() {
 
   return (
     <div className="admin-tool">
-      <h2 className="section-title section-title--small">Manage upcoming events</h2>
-
       {showAddForm ? (
         <>
+          <h2 className="section-title section-title--small">Add event</h2>
           <AddEventForm
             credential={credential}
             onSaved={() => {
@@ -29,9 +28,12 @@ export function AdminEvents() {
         </>
       ) : (
         <>
-          <button type="button" className="btn btn--primary" onClick={() => setShowAddForm(true)}>
-            + Add event
-          </button>
+          <div className="admin-tool__header">
+            <h2 className="section-title section-title--small">Manage upcoming events</h2>
+            <button type="button" className="btn btn--primary" onClick={() => setShowAddForm(true)}>
+              + Add event
+            </button>
+          </div>
           <ManageUpcomingEvents key={manageListKey} credential={credential} onCredentialInvalid={onCredentialInvalid} />
         </>
       )}

@@ -471,16 +471,16 @@
 .manage-event-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
+  gap: 1rem;
+  padding: 0.85rem;
   background: var(--color-bg);
   border: 1px solid rgba(215, 161, 69, 0.15);
   border-radius: 6px;
 }
 
 .manage-event-row__thumb {
-  width: 48px;
-  height: 48px;
+  width: 72px;
+  height: 72px;
   border-radius: 6px;
   object-fit: cover;
   flex-shrink: 0;
@@ -498,9 +498,21 @@
 }
 
 .manage-event-row__date {
-  margin: 0;
+  margin: 0 0 0.2rem;
   font-size: 0.85rem;
   color: var(--color-text-muted);
+}
+
+.admin-tool__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.admin-tool__header .section-title--small {
+  margin: 0;
 }
 
 .manage-event-row__actions {

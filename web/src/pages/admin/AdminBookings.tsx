@@ -71,7 +71,7 @@ export function AdminBookings() {
       })
       .then((data) => {
         setSheetConfigured(data.sheetConfigured)
-        setBookings([...data.bookings].sort((a, b) => b.date.localeCompare(a.date)))
+        setBookings([...data.bookings].sort((a, b) => a.date.localeCompare(b.date)))
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : 'Could not load bookings'))
   }, [credential, onCredentialInvalid])
@@ -139,36 +139,43 @@ export function AdminBookings() {
 
   return (
     <div className="admin-tool">
-      <h2 className="section-title section-title--small">Manage bookings</h2>
-
       {actionError && <p className="submit-message submit-message--error">{actionError}</p>}
 
       {showCreate ? (
-        <BookingAdminForm
-          credential={credential}
-          onCredentialInvalid={onCredentialInvalid}
-          onCancel={() => setShowCreate(false)}
-          onSaved={() => {
-            setShowCreate(false)
-            void load()
-          }}
-        />
+        <>
+          <h2 className="section-title section-title--small">Add booking</h2>
+          <BookingAdminForm
+            credential={credential}
+            onCredentialInvalid={onCredentialInvalid}
+            onCancel={() => setShowCreate(false)}
+            onSaved={() => {
+              setShowCreate(false)
+              void load()
+            }}
+          />
+        </>
       ) : editingBooking ? (
-        <BookingAdminForm
-          credential={credential}
-          existingBooking={editingBooking}
-          onCredentialInvalid={onCredentialInvalid}
-          onCancel={() => setEditingReference(null)}
-          onSaved={() => {
-            setEditingReference(null)
-            void load()
-          }}
-        />
+        <>
+          <h2 className="section-title section-title--small">Edit booking</h2>
+          <BookingAdminForm
+            credential={credential}
+            existingBooking={editingBooking}
+            onCredentialInvalid={onCredentialInvalid}
+            onCancel={() => setEditingReference(null)}
+            onSaved={() => {
+              setEditingReference(null)
+              void load()
+            }}
+          />
+        </>
       ) : (
         <>
-          <button type="button" className="btn btn--primary" onClick={() => setShowCreate(true)}>
-            + Add booking
-          </button>
+          <div className="admin-tool__header">
+            <h2 className="section-title section-title--small">Manage bookings</h2>
+            <button type="button" className="btn btn--primary" onClick={() => setShowCreate(true)}>
+              + Add booking
+            </button>
+          </div>
 
           {bookings.length === 0 ? (
             <p className="field-hint">No bookings yet.</p>
@@ -177,8 +184,9 @@ export function AdminBookings() {
               {bookings.map((b) => (
                 <li key={b.reference} className="manage-event-row">
                   <div className="manage-event-row__info">
+                    <p className="manage-event-row__date">{b.date}</p>
                     <p className="manage-event-row__title">
-                      {b.name} — {b.date} <span className="field-hint">(Ref: {b.reference})</span>
+                      {b.name} <span className="field-hint">(Ref: {b.reference})</span>
                     </p>
                     <p className="manage-event-row__date">
                       {statusLabel(b.status)} · {b.paid ? 'Paid' : 'Awaiting payment'} ·{' '}

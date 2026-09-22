@@ -1005,6 +1005,7 @@ async function createBookingRecord(
     paid?: boolean
     createdBy?: string
     notifyCommittee?: boolean
+    status?: BookingStatus
   } = {},
 ): Promise<void> {
   const {
@@ -1012,6 +1013,7 @@ async function createBookingRecord(
     paid = paymentMethod === 'online',
     createdBy = 'website',
     notifyCommittee = true,
+    status = 'provisional',
   } = options
   const { name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, sendCopyToHirer, barOpenTime } = fields
   const amounts = computeAmountDue(exemption, barOpenTime)
@@ -1029,7 +1031,7 @@ async function createBookingRecord(
   let calendarEventId = ''
   if (calendar && calendarId) {
     try {
-      const eventSummary = buildBookingEventSummary(name, phone, reference, 'provisional', paid)
+      const eventSummary = buildBookingEventSummary(name, phone, reference, status, paid)
       const eventDescription = buildBookingEventDescription({
         reference, paymentLine, breakdownLines, paymentIntentId,
         name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes,
@@ -1129,7 +1131,7 @@ async function createBookingRecord(
         requestBody: {
           values: [bookingRowValues({
             reference,
-            status: 'provisional',
+            status,
             paymentMethod,
             paid,
             date,
@@ -1367,7 +1369,7 @@ app.post('/api/admin/bookings', async (req, res) => {
 
   const {
     name, email, phone, address, date, startTime, endTime, eventType, attendees,
-    exemption, notes, barOpenTime, paymentMethod, paid,
+    exemption, notes, barOpenTime, paymentMethod, paid, confirmed,
   } = req.body ?? {}
 
   if (!name || !email || !phone || !date) {
@@ -1390,6 +1392,7 @@ app.post('/api/admin/bookings', async (req, res) => {
     paid: Boolean(paid),
     createdBy: editorEmail,
     notifyCommittee: false,
+    status: confirmed ? 'confirmed' : 'provisional',
   })
 
   console.info(`[bookings] ${reference} created directly by admin ${editorEmail}`)
@@ -1424,15 +1427,21 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
   }
   const { row, booking: existing } = found
 
-  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, notes } = req.body ?? {}
+  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, notes, confirmed } = req.body ?? {}
   if (!name || !email || !phone || !date) {
     res.status(400).json({ error: 'name, email, phone, and date are required.' })
     return
   }
 
+  // A cancelled booking can't be resurrected through edit; otherwise let the form's
+  // "Confirmed" checkbox move the booking between provisional and confirmed. If the field
+  // is omitted entirely (an older client), leave the current status untouched.
+  const newStatus: BookingStatus =
+    existing.status === 'cancelled' ? 'cancelled' : confirmed === undefined ? existing.status : confirmed ? 'confirmed' : 'provisional'
+
   const updated: Omit<BookingRecord, 'row'> = {
     reference: existing.reference,
-    status: existing.status,
+    status: newStatus,
     paymentMethod: existing.paymentMethod,
     paid: existing.paid,
     exemption: existing.exemption,
@@ -1465,7 +1474,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
         calendarId,
         eventId: existing.calendarEventId,
         requestBody: {
-          summary: buildBookingEventSummary(updated.name, updated.phone, reference, existing.status, existing.paid),
+          summary: buildBookingEventSummary(updated.name, updated.phone, reference, newStatus, existing.paid),
           description: buildBookingEventDescription({
             reference, paymentLine, breakdownLines, paymentIntentId: existing.paymentIntentId,
             name: updated.name, email: updated.email, phone: updated.phone, address: updated.address,

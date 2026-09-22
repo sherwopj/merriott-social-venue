@@ -31,8 +31,8 @@ export function BookingAdminForm({
   const [barNeeded, setBarNeeded] = useState(Boolean(existingBooking?.barOpenTime))
   const [barOpenTime, setBarOpenTime] = useState(existingBooking?.barOpenTime ?? '')
   const [notes, setNotes] = useState(existingBooking?.notes ?? '')
-  const [paymentMethod, setPaymentMethod] = useState<'online' | 'in_person'>(existingBooking?.paymentMethod ?? 'in_person')
   const [paid, setPaid] = useState(existingBooking?.paid ?? false)
+  const [confirmed, setConfirmed] = useState(existingBooking?.status === 'confirmed')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -47,13 +47,15 @@ export function BookingAdminForm({
         ? apiUrl(`/api/admin/bookings/${existingBooking!.reference}`)
         : apiUrl('/api/admin/bookings')
 
-      const body: Record<string, unknown> = { name, email, phone, address, date, startTime, endTime, eventType, attendees, notes }
+      const body: Record<string, unknown> = { name, email, phone, address, date, startTime, endTime, eventType, attendees, notes, confirmed }
       if (!isEditing) {
         // Exemption and bar-opening time are only ever set at creation — editing an existing
         // booking can't change them, since they determine the price.
         body.exemption = exemption
         body.barOpenTime = barNeeded ? barOpenTime : ''
-        body.paymentMethod = paymentMethod
+        // Admin-entered bookings are always recorded as taken in person by a committee
+        // member — there's no Stripe Checkout step here, unlike the public booking form.
+        body.paymentMethod = 'in_person'
         body.paid = paid
       }
 
@@ -185,27 +187,6 @@ export function BookingAdminForm({
 
       {!isEditing && (
         <>
-          <div className="field">
-            <span>Payment method</span>
-            <label className="checkbox-field">
-              <input
-                type="radio"
-                name="admin-paymentMethod"
-                checked={paymentMethod === 'online'}
-                onChange={() => setPaymentMethod('online')}
-              />
-              <span>Online by card</span>
-            </label>
-            <label className="checkbox-field">
-              <input
-                type="radio"
-                name="admin-paymentMethod"
-                checked={paymentMethod === 'in_person'}
-                onChange={() => setPaymentMethod('in_person')}
-              />
-              <span>In person at the venue</span>
-            </label>
-          </div>
           <label className="checkbox-field">
             <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} />
             <span>Payment has already been taken</span>
@@ -217,6 +198,11 @@ export function BookingAdminForm({
           </p>
         </>
       )}
+
+      <label className="checkbox-field">
+        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+        <span>Confirmed — contacted the hirer and confirmed the booking</span>
+      </label>
 
       <div className="admin-form-actions">
         <button type="submit" className="btn btn--primary" disabled={submitting}>

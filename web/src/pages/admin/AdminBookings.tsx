@@ -3,6 +3,7 @@ import { useOutletContext } from 'react-router-dom'
 import { apiUrl } from '../../lib/apiBase'
 import { EXEMPTION_LABELS } from '../../lib/bookingPricing'
 import { BookingAdminForm } from '../../components/BookingAdminForm'
+import { BookingViewModal } from '../../components/BookingViewModal'
 import type { AdminOutletContext } from './AdminLayout'
 
 export type BookingStatus = 'provisional' | 'confirmed' | 'cancelled'
@@ -32,8 +33,12 @@ export type Booking = {
   calendarEventId?: string
   calendarEventLink?: string
   paymentIntentId?: string
+  paymentDashboardUrl?: string
   createdBy: string
   lastUpdatedBy?: string
+  feeRefundedAmount: number
+  depositRefundedAmount: number
+  barSurchargeRefundedAmount: number
 }
 
 type BookingsResponse = {
@@ -42,7 +47,7 @@ type BookingsResponse = {
 }
 
 // Booking amounts are stored on the sheet in pence (matching Stripe's convention).
-function formatPounds(pence: number) {
+export function formatPounds(pence: number) {
   return `£${(pence / 100).toFixed(2)}`
 }
 
@@ -52,6 +57,14 @@ function statusLabel(status: BookingStatus) {
   return 'Provisional'
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function refundedTotal(b: Booking) {
+  return b.feeRefundedAmount + b.depositRefundedAmount + b.barSurchargeRefundedAmount
+}
+
 export function AdminBookings() {
   const { credential, onCredentialInvalid } = useOutletContext<AdminOutletContext>()
   const [bookings, setBookings] = useState<Booking[] | null>(null)
@@ -59,6 +72,7 @@ export function AdminBookings() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [editingReference, setEditingReference] = useState<string | null>(null)
+  const [viewingReference, setViewingReference] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [actioningReference, setActioningReference] = useState<string | null>(null)
 
@@ -139,6 +153,8 @@ export function AdminBookings() {
   if (!bookings) return <p className="field-hint">Loading…</p>
 
   const editingBooking = bookings.find((b) => b.reference === editingReference) ?? null
+  const viewingBooking = bookings.find((b) => b.reference === viewingReference) ?? null
+  const today = todayIso()
 
   return (
     <div className="admin-tool">
@@ -194,6 +210,7 @@ export function AdminBookings() {
                     <p className="manage-event-row__date">
                       {statusLabel(b.status)} · {b.paid ? 'Paid' : 'Awaiting payment'} ·{' '}
                       {EXEMPTION_LABELS[b.exemption] || b.exemption} · Total: {formatPounds(b.total)}
+                      {refundedTotal(b) > 0 ? ` · Refunded: ${formatPounds(refundedTotal(b))}` : ''}
                     </p>
                     <p className="manage-event-row__date">
                       Created by {b.createdBy}
@@ -231,12 +248,34 @@ export function AdminBookings() {
                         {actioningReference === b.reference ? 'Working…' : 'Cancel'}
                       </button>
                     )}
+                    {(b.status === 'cancelled' || b.date < today) && (
+                      <button type="button" className="btn btn--ghost" onClick={() => setViewingReference(b.reference)}>
+                        View
+                      </button>
+                    )}
+                    {b.status === 'cancelled' && b.paymentMethod === 'online' && b.paid && b.paymentDashboardUrl && (
+                      <a href={b.paymentDashboardUrl} target="_blank" rel="noopener noreferrer" className="btn btn--ghost">
+                        Refund ↗
+                      </a>
+                    )}
                   </div>
                 </li>
               ))}
             </ul>
           )}
         </>
+      )}
+
+      {viewingBooking && (
+        <BookingViewModal
+          booking={viewingBooking}
+          credential={credential}
+          onCredentialInvalid={onCredentialInvalid}
+          onClose={() => setViewingReference(null)}
+          onRefundSaved={(updated) => {
+            setBookings((current) => (current ? current.map((b) => (b.reference === updated.reference ? updated : b)) : current))
+          }}
+        />
       )}
     </div>
   )

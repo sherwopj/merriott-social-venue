@@ -32,7 +32,7 @@ function calendarIdForRoom(room: string | undefined): string | undefined {
 }
 
 const bookingsSheetId = process.env.GOOGLE_BOOKINGS_SHEET_ID
-const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:AA1000'
+const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:AE1000'
 const bookingsSheetConfigured = Boolean(bookingsSheetId && serviceAccountJson)
 
 const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID
@@ -1025,8 +1025,12 @@ type BookingRecord = {
   calendarEventId?: string
   calendarEventLink?: string
   paymentIntentId?: string
+  paymentDashboardUrl?: string
   createdBy: string
   lastUpdatedBy?: string
+  feeRefundedAmount: number
+  depositRefundedAmount: number
+  barSurchargeRefundedAmount: number
 }
 
 function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
@@ -1034,9 +1038,11 @@ function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
     , reference, status, paymentMethod, paid, date, startTime, endTime,
     eventType, attendees, exemption, barOpenTime, notes, name, email, phone, address,
     feeAmount, depositAmount, barSurchargeAmount, total, calendarEventId, calendarEventLink, paymentIntentId, createdBy,
-    lastUpdatedBy, barCloseTime,
+    lastUpdatedBy, barCloseTime, feeRefundedAmount, depositRefundedAmount, barSurchargeRefundedAmount,
   ] = row
   if (!reference || !reference.trim()) return null
+
+  const trimmedPaymentIntentId = paymentIntentId && paymentIntentId.trim() ? paymentIntentId.trim() : undefined
 
   return {
     reference: reference.trim(),
@@ -1062,9 +1068,13 @@ function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
     total: Number(total) || 0,
     calendarEventId: calendarEventId && calendarEventId.trim() ? calendarEventId.trim() : undefined,
     calendarEventLink: calendarEventLink && calendarEventLink.trim() ? calendarEventLink.trim() : undefined,
-    paymentIntentId: paymentIntentId && paymentIntentId.trim() ? paymentIntentId.trim() : undefined,
+    paymentIntentId: trimmedPaymentIntentId,
+    paymentDashboardUrl: trimmedPaymentIntentId ? stripePaymentDashboardUrl(trimmedPaymentIntentId) : undefined,
     createdBy: createdBy && createdBy.trim() ? createdBy.trim() : 'website',
     lastUpdatedBy: lastUpdatedBy && lastUpdatedBy.trim() ? lastUpdatedBy.trim() : undefined,
+    feeRefundedAmount: Number(feeRefundedAmount) || 0,
+    depositRefundedAmount: Number(depositRefundedAmount) || 0,
+    barSurchargeRefundedAmount: Number(barSurchargeRefundedAmount) || 0,
   }
 }
 
@@ -1104,6 +1114,9 @@ function bookingRowValues(b: {
   paymentIntentId: string
   createdBy: string
   lastUpdatedBy: string
+  feeRefundedAmount: number
+  depositRefundedAmount: number
+  barSurchargeRefundedAmount: number
 }): string[] {
   return [
     new Date().toISOString(),
@@ -1133,6 +1146,10 @@ function bookingRowValues(b: {
     b.createdBy,
     b.lastUpdatedBy,
     b.barCloseTime,
+    String(b.feeRefundedAmount || 0),
+    String(b.depositRefundedAmount || 0),
+    String(b.barSurchargeRefundedAmount || 0),
+    b.paymentIntentId ? stripePaymentDashboardUrl(b.paymentIntentId) : '',
   ]
 }
 
@@ -1141,7 +1158,7 @@ function bookingRowValues(b: {
 // returns it already parsed, since every admin action needs both.
 async function getBookingByReference(reference: string): Promise<{ row: number; booking: BookingRecord } | null> {
   try {
-    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:AA' })
+    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:AE' })
     const rows: string[][] = response.data.values || []
     const index = rows.findIndex((row) => (row[1] ?? '').trim() === reference)
     if (index === -1) return null
@@ -1292,7 +1309,7 @@ async function createBookingRecord(
       const nextRow = await getNextEmptyBookingRow()
       await sheets.spreadsheets.values.update({
         spreadsheetId: bookingsSheetId,
-        range: `A${nextRow}:AA${nextRow}`,
+        range: `A${nextRow}:AE${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [bookingRowValues({
@@ -1322,6 +1339,9 @@ async function createBookingRecord(
             paymentIntentId: paymentIntentId || '',
             createdBy,
             lastUpdatedBy: '',
+            feeRefundedAmount: 0,
+            depositRefundedAmount: 0,
+            barSurchargeRefundedAmount: 0,
           })],
         },
       })
@@ -1512,6 +1532,16 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 
 // ---- Admin: manage bookings (create/edit/confirm/cancel) ----
 
+const BOOKINGS_LIST_PAST_WINDOW_DAYS = 14
+
+// Bookings list dates are plain 'YYYY-MM-DD' strings, which sort lexically the same as
+// chronologically, so this string cutoff avoids any timezone-conversion pitfalls.
+function isoDateDaysAgo(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return d.toISOString().slice(0, 10)
+}
+
 app.get('/api/admin/bookings', async (req, res) => {
   const editorEmail = await verifyEditorEmail(req.headers.authorization)
   if (!editorEmail) {
@@ -1525,7 +1555,10 @@ app.get('/api/admin/bookings', async (req, res) => {
 
   try {
     const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: bookingsSheetRange })
-    const bookings = parseBookingRows(response.data.values || [])
+    // Keep the default list to upcoming bookings plus the last two weeks of history, so it
+    // stays manageable long-term rather than growing to every booking ever made.
+    const cutoff = isoDateDaysAgo(BOOKINGS_LIST_PAST_WINDOW_DAYS)
+    const bookings = parseBookingRows(response.data.values || []).filter((b) => !b.date || b.date >= cutoff)
     res.json({ sheetConfigured: true, bookings })
   } catch (e) {
     console.error('[bookings] Failed to load bookings sheet:', e)
@@ -1629,6 +1662,9 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
     paymentIntentId: existing.paymentIntentId,
     createdBy: existing.createdBy,
     lastUpdatedBy: editorEmail,
+    feeRefundedAmount: existing.feeRefundedAmount,
+    depositRefundedAmount: existing.depositRefundedAmount,
+    barSurchargeRefundedAmount: existing.barSurchargeRefundedAmount,
     name: String(name).trim(),
     email: String(email).trim(),
     phone: String(phone).trim(),
@@ -1669,7 +1705,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:AA${row}`,
+      range: `A${row}:AE${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
@@ -1732,7 +1768,7 @@ app.post('/api/admin/bookings/:reference/confirm', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:AA${row}`,
+      range: `A${row}:AE${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
@@ -1787,7 +1823,7 @@ app.delete('/api/admin/bookings/:reference', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:AA${row}`,
+      range: `A${row}:AE${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
@@ -1836,6 +1872,81 @@ app.delete('/api/admin/bookings/:reference', async (req, res) => {
 
   console.info(`[bookings] ${reference} cancelled by ${editorEmail}`)
   res.json({ ok: true })
+})
+
+// Records how much of each charged component (hire fee, cleaning deposit, bar surcharge) has
+// been refunded — for bookkeeping only. The actual refund is always issued manually in the
+// Stripe Dashboard (linked via paymentDashboardUrl); this endpoint never talks to Stripe.
+app.put('/api/admin/bookings/:reference/refund', async (req, res) => {
+  const editorEmail = await verifyEditorEmail(req.headers.authorization)
+  if (!editorEmail) {
+    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
+    return
+  }
+  if (!sheets || !bookingsSheetConfigured) {
+    res.status(503).json({ error: 'Bookings sheet is not configured on the server.' })
+    return
+  }
+
+  const reference = req.params.reference
+  const found = await getBookingByReference(reference)
+  if (!found) {
+    res.status(404).json({ error: 'Booking not found — it may already have been cancelled elsewhere.' })
+    return
+  }
+  const { row, booking: existing } = found
+
+  if (existing.paymentMethod !== 'online' || !existing.paymentIntentId) {
+    res.status(400).json({ error: 'Only bookings paid online via Stripe can have refunds recorded.' })
+    return
+  }
+
+  const { feeRefundedAmount, depositRefundedAmount, barSurchargeRefundedAmount } = req.body ?? {}
+  const parsedFee = Number(feeRefundedAmount)
+  const parsedDeposit = Number(depositRefundedAmount)
+  const parsedBar = Number(barSurchargeRefundedAmount)
+  if (
+    !Number.isFinite(parsedFee) || parsedFee < 0 || parsedFee > existing.feeAmount ||
+    !Number.isFinite(parsedDeposit) || parsedDeposit < 0 || parsedDeposit > existing.depositAmount ||
+    !Number.isFinite(parsedBar) || parsedBar < 0 || parsedBar > existing.barSurchargeAmount
+  ) {
+    res.status(400).json({ error: "Each refunded amount must be between £0 and the amount originally charged for that item." })
+    return
+  }
+
+  try {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: bookingsSheetId,
+      range: `A${row}:AE${row}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [bookingRowValues({
+          ...existing,
+          calendarEventId: existing.calendarEventId || '',
+          calendarEventLink: existing.calendarEventLink || '',
+          paymentIntentId: existing.paymentIntentId || '',
+          lastUpdatedBy: editorEmail,
+          feeRefundedAmount: parsedFee,
+          depositRefundedAmount: parsedDeposit,
+          barSurchargeRefundedAmount: parsedBar,
+        })],
+      },
+    })
+  } catch (e) {
+    console.error(`[bookings] Failed to save refund record for ${reference} (by ${editorEmail}):`, e)
+    res.status(502).json({ error: 'Failed to save the refund record to the sheet.' })
+    return
+  }
+
+  console.info(`[bookings] ${reference} refund record updated by ${editorEmail}`)
+  res.json({
+    booking: {
+      ...existing,
+      feeRefundedAmount: parsedFee,
+      depositRefundedAmount: parsedDeposit,
+      barSurchargeRefundedAmount: parsedBar,
+    },
+  })
 })
 
 app.use((_req, res) => {

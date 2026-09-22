@@ -100,6 +100,11 @@ const resend = resendApiKey ? new Resend(resendApiKey) : null
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null
+const stripeTestMode = stripeSecretKey?.startsWith('sk_test_') ?? false
+
+function stripePaymentDashboardUrl(paymentIntentId: string): string {
+  return `https://dashboard.stripe.com/${stripeTestMode ? 'test/' : ''}payments/${paymentIntentId}`
+}
 
 const webOrigins = (process.env.WEB_ORIGIN ?? '')
   .split(',')
@@ -781,6 +786,7 @@ async function createBookingRecord(
   fields: BookingFields,
   reference: string,
   paymentMethod: 'online' | 'in_person',
+  paymentIntentId?: string,
 ): Promise<void> {
   const { name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, sendCopyToHirer, barOpenTime } = fields
   const amounts = computeAmountDue(exemption, barOpenTime)
@@ -847,6 +853,10 @@ ${notes || 'None'}
         ? `<p><strong>Google Calendar Event Link:</strong> <a href="${htmlLink}">${htmlLink}</a></p>`
         : '<p><em>Note: Google Calendar event link could not be generated.</em></p>'
 
+      const paymentLinkSection = paymentIntentId
+        ? `<p><strong>View payment in Stripe:</strong> <a href="${stripePaymentDashboardUrl(paymentIntentId)}">${stripePaymentDashboardUrl(paymentIntentId)}</a></p>`
+        : ''
+
       const recipients = Array.isArray(recipient) ? [...recipient] : [recipient]
       if (sendCopyToHirer && email && !recipients.includes(email)) {
         recipients.push(email)
@@ -881,6 +891,7 @@ ${notes || 'None'}
           ${notes ? `<h3>Notes:</h3><p>${notes}</p>` : ''}
 
           ${calendarLinkSection}
+          ${paymentLinkSection}
 
           <p>Please check the calendar, then get in touch with the hirer to confirm${paymentMethod === 'in_person' ? ' and take payment' : ''}.</p>
         `,
@@ -1063,7 +1074,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         sendCopyToHirer: metadata.sendCopyToHirer === 'yes',
         barOpenTime: metadata.barOpenTime || undefined,
       }
-      await createBookingRecord(fields, metadata.reference ?? session.id, 'online')
+      const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+      await createBookingRecord(fields, metadata.reference ?? session.id, 'online', paymentIntentId)
       console.info(`[bookings] Booking ${metadata.reference} created from paid Stripe session ${session.id}`)
     }
   }

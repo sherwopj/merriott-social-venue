@@ -1432,6 +1432,9 @@ code {
   text-align: left;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(215, 161, 69, 0.2);
+  border-radius: 8px;
+  padding: 1.75rem 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .booking-success__details-title {
@@ -1448,8 +1451,8 @@ code {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 1rem;
-  padding: 0.55rem 0;
+  gap: 1.5rem;
+  padding: 0.65rem 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
@@ -1478,7 +1481,9 @@ code {
   text-align: left;
   background: rgba(215, 161, 69, 0.06);
   border: 1px solid rgba(215, 161, 69, 0.2);
+  border-radius: 8px;
   margin-bottom: 2rem;
+  padding: 1.75rem 2rem;
 }
 
 .booking-success__next-title {
@@ -1513,6 +1518,10 @@ code {
   border-top: 1px solid rgba(215, 161, 69, 0.15);
 }
 
+.booking-success__contact-hint p {
+  margin: 0.4rem 0 0;
+}
+
 .btn--back {
   margin-top: 0.5rem;
 }
@@ -1526,7 +1535,7 @@ code {
 @media (max-width: 600px) {
   .booking-success__details,
   .booking-success__next-steps {
-    padding: 1.25rem;
+    padding: 1.25rem 1.5rem;
   }
 
   .booking-success__row {

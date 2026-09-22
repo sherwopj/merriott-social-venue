@@ -189,7 +189,7 @@ function BookingSuccess({ booking, onReset }: { booking: BookingConfirmation; on
           <li>We will be in contact shortly to confirm availability, discuss any details, and arrange payment.</li>
           <li>If you need to get in touch sooner, please call the venue during opening hours.</li>
         </ol>
-        <p className="booking-success__contact-hint">
+        <div className="booking-success__contact-hint">
           📞 You can reach us at the venue:
           <p>
             Telephone:{' '}
@@ -199,7 +199,7 @@ function BookingSuccess({ booking, onReset }: { booking: BookingConfirmation; on
             Email:{' '}
             <a href={`mailto:${EMAIL_ADDRESS}`}>{EMAIL_ADDRESS}</a>
           </p>
-        </p>
+        </div>
       </div>
 
       <button type="button" className="btn btn--ghost btn--back" onClick={onReset}>

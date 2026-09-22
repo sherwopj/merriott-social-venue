@@ -49,7 +49,13 @@ export function ManageUpcomingEvents({
       const res = await fetch(apiUrl(`/api/upcoming-events/${ev.id}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ calendarEventId: ev.calendarEventId, imageUrl: ev.image, room: ev.room }),
+        body: JSON.stringify({
+          calendarEventId: ev.calendarEventId,
+          imageUrl: ev.image,
+          room: ev.room,
+          title: ev.title,
+          startDate: ev.startDate,
+        }),
       })
       if (!res.ok) {
         if (res.status === 401) {

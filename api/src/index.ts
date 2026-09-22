@@ -282,6 +282,54 @@ async function getSheetTabId(targetSheetId: string, tabName?: string): Promise<n
   }
 }
 
+async function sendEventNotificationEmail(params: {
+  action: 'added' | 'deleted'
+  title: string
+  date: string
+  startTime?: string
+  endTime?: string
+  room: string
+  category?: string
+  calendarEventLink?: string
+  editorEmail: string
+}): Promise<void> {
+  const actionLabel = params.action === 'added' ? 'New event added' : 'Event deleted'
+  if (!emailConfigured || !resend) {
+    console.warn(`[upcoming-events] Resend not configured. "${actionLabel}" notification email skipped.`)
+    return
+  }
+  try {
+    const recipient = process.env.NOTIFICATION_EMAIL_TO || 'merriottsocialvenue@gmail.com'
+    const fromAddress = process.env.EMAIL_FROM || 'bookings@merriottsocialvenue.co.uk'
+    const recipients = Array.isArray(recipient) ? [...recipient] : [recipient]
+
+    const { error } = await resend.emails.send({
+      from: fromAddress,
+      to: recipients,
+      subject: `${actionLabel}: ${params.title}`,
+      html: `
+        <h2>${actionLabel}</h2>
+        <ul>
+          <li><strong>Title:</strong> ${params.title}</li>
+          <li><strong>Date:</strong> ${params.date}${params.startTime && params.endTime ? ` (${params.startTime}–${params.endTime})` : ''}</li>
+          <li><strong>Room:</strong> ${params.room}</li>
+          ${params.category ? `<li><strong>Category:</strong> ${params.category}</li>` : ''}
+          <li><strong>By:</strong> ${params.editorEmail}</li>
+        </ul>
+        ${params.calendarEventLink ? `<p><a href="${params.calendarEventLink}">View in Calendar</a></p>` : ''}
+      `,
+    })
+
+    if (error) {
+      console.error(`[upcoming-events] Failed to send "${actionLabel}" notification email:`, error)
+    } else {
+      console.log(`[upcoming-events] "${actionLabel}" notification email sent to ${recipients.join(', ')}`)
+    }
+  } catch (e) {
+    console.error(`[upcoming-events] Failed to send "${actionLabel}" notification email:`, e)
+  }
+}
+
 function buildCalendarEventBody(
   title: string,
   description: string,
@@ -497,6 +545,18 @@ app.post(
     upcomingEventsCache.fetchedAt = 0 // force the next GET to pick this up immediately
     console.info(`[upcoming-events] Event "${title}" added by ${editorEmail}`)
 
+    await sendEventNotificationEmail({
+      action: 'added',
+      title: String(title).trim(),
+      date: parsedStartDate,
+      startTime: parsedStartTime,
+      endTime: parsedEndTime,
+      room: resolvedRoom,
+      category: String(category).trim(),
+      calendarEventLink: calendarEventLink || undefined,
+      editorEmail,
+    })
+
     res.status(201).json({
       event: {
         id: uid,
@@ -694,7 +754,7 @@ app.delete('/api/upcoming-events/:id', async (req, res) => {
     return
   }
 
-  const { calendarEventId, imageUrl, room } = req.body ?? {}
+  const { calendarEventId, imageUrl, room, title, startDate } = req.body ?? {}
   const deleteCalendarId = calendarIdForRoom((ROOMS as readonly string[]).includes(room) ? room : undefined)
 
   if (calendar && deleteCalendarId && typeof calendarEventId === 'string' && calendarEventId) {
@@ -734,6 +794,15 @@ app.delete('/api/upcoming-events/:id', async (req, res) => {
 
   upcomingEventsCache.fetchedAt = 0
   console.info(`[upcoming-events] Row ${row} deleted by ${editorEmail}`)
+
+  await sendEventNotificationEmail({
+    action: 'deleted',
+    title: typeof title === 'string' && title ? title : '(untitled event)',
+    date: typeof startDate === 'string' ? startDate : '',
+    room: typeof room === 'string' && room ? room : DEFAULT_ROOM,
+    editorEmail,
+  })
+
   res.json({ ok: true })
 })
 
@@ -1454,7 +1523,6 @@ app.post('/api/admin/bookings', async (req, res) => {
   await createBookingRecord(fields, reference, paymentMethod, {
     paid: Boolean(paid),
     createdBy: editorEmail,
-    notifyCommittee: false,
     status: confirmed ? 'confirmed' : 'provisional',
   })
 

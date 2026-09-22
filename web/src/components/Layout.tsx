@@ -6,6 +6,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 export function Layout() {
   const location = useLocation()
   const isBookingPage = location.pathname === '/book'
+  const isAdminPage = location.pathname.startsWith('/admin')
 
   return (
     <div className="layout">
@@ -45,7 +46,7 @@ export function Layout() {
         <p>Merriott Social Venue · Merriott, Somerset, UK</p>
       </footer>
 
-      {!isBookingPage && (
+      {!isBookingPage && !isAdminPage && (
         <div className="sticky-book" role="region" aria-label="Book the function room">
           <NavLink to="/book" className="sticky-book__btn">
             Book function room

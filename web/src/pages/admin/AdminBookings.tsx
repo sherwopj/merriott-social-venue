@@ -201,11 +201,16 @@ export function AdminBookings() {
           ) : (
             <ul className="manage-events-list">
               {bookings.map((b) => (
-                <li key={b.reference} className="manage-event-row">
+                <li
+                  key={b.reference}
+                  className={`manage-event-row${b.status === 'cancelled' || b.date < today ? ' manage-event-row--muted' : ''}`}
+                >
                   <div className="manage-event-row__info">
                     <p className="manage-event-row__date">{b.date}</p>
                     <p className="manage-event-row__title">
                       {b.name} <span className="field-hint">(Ref: {b.reference})</span>
+                      {b.status === 'cancelled' && <span className="status-pill status-pill--cancelled">Cancelled</span>}
+                      {b.status !== 'cancelled' && b.date < today && <span className="status-pill status-pill--past">Past</span>}
                     </p>
                     <p className="manage-event-row__date">
                       {statusLabel(b.status)} · {b.paid ? 'Paid' : 'Awaiting payment'} ·{' '}

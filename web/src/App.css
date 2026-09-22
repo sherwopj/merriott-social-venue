@@ -529,6 +529,32 @@
   flex-wrap: wrap;
 }
 
+.manage-event-row--muted {
+  opacity: 0.6;
+}
+
+.status-pill {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+}
+
+.status-pill--cancelled {
+  background: rgba(240, 80, 80, 0.15);
+  color: #f0a8a8;
+}
+
+.status-pill--past {
+  background: rgba(215, 161, 69, 0.15);
+  color: var(--color-text-muted);
+}
+
 .manage-event-row__cal-link {
   display: inline-block;
   margin-top: 0.2rem;

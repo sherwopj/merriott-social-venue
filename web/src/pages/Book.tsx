@@ -2,6 +2,7 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef
 import { useSearchParams } from 'react-router-dom'
 import { apiUrl } from '../lib/apiBase'
 import { EXEMPTION_LABELS, computeAmountBreakdown } from '../lib/bookingPricing'
+import { addMonths, daysInMonth, startOfMonth, toISODate } from '../lib/dateGrid'
 import functionRoomHirePdf from '../assets/MSV_Function_Room_Hire_Policy_and_Form.pdf'
 
 type BusySlot = { start: string; end: string }
@@ -74,22 +75,6 @@ function formatTime(t: string) {
   const suffix = hour >= 12 ? 'pm' : 'am'
   const display = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
   return `${display}:${m}${suffix}`
-}
-
-function startOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), 1)
-}
-
-function addMonths(d: Date, n: number) {
-  return new Date(d.getFullYear(), d.getMonth() + n, 1)
-}
-
-function toISODate(d: Date) {
-  return d.toISOString().slice(0, 10)
-}
-
-function daysInMonth(year: number, monthIndex: number) {
-  return new Date(year, monthIndex + 1, 0).getDate()
 }
 
 function getDayStatus(dayStr: string, busy: BusySlot[]) {

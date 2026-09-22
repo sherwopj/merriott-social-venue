@@ -885,6 +885,49 @@
   background: var(--color-accent);
 }
 
+.book-calendar--compact {
+  margin: 0.5rem 0 1rem;
+}
+
+.cal-grid--compact {
+  gap: 4px;
+}
+
+.cal-day {
+  min-height: 2.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(215, 161, 69, 0.2);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cal-day--free {
+  background: rgba(215, 161, 69, 0.15);
+  color: var(--color-text);
+}
+
+.cal-day--free:hover {
+  background: rgba(215, 161, 69, 0.35);
+}
+
+.cal-day--busy {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-muted);
+}
+
+.cal-day--selected {
+  background: var(--color-accent) !important;
+  color: var(--color-bg) !important;
+  border-color: var(--color-accent);
+}
+
+.cal-day:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .btn {
   border: none;
   border-radius: 6px;

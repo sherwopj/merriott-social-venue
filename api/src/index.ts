@@ -725,13 +725,17 @@ app.delete('/api/upcoming-events/:id', async (req, res) => {
 })
 
 app.get('/api/calendar/availability', async (req, res) => {
-  const { start, end } = req.query
+  const { start, end, room } = req.query
   if (typeof start !== 'string' || typeof end !== 'string') {
     res.status(400).json({ error: 'start and end query params (ISO dates) are required' })
     return
   }
 
-  if (!calendar || !calendarId) {
+  // Defaults to the Function Room calendar — the public booking page is function-room-only
+  // and never passes a room, so its behavior is unchanged.
+  const targetCalendarId = calendarIdForRoom(typeof room === 'string' ? room : undefined)
+
+  if (!calendar || !targetCalendarId) {
     res.json({ busy: [], calendarConfigured: false })
     return
   }
@@ -741,11 +745,11 @@ app.get('/api/calendar/availability', async (req, res) => {
       requestBody: {
         timeMin: new Date(start).toISOString(),
         timeMax: new Date(end).toISOString(),
-        items: [{ id: calendarId }],
+        items: [{ id: targetCalendarId }],
       },
     })
 
-    const busy = response.data.calendars?.[calendarId]?.busy || []
+    const busy = response.data.calendars?.[targetCalendarId]?.busy || []
     res.json({ busy, calendarConfigured: true })
   } catch (error: any) {
     console.error('Calendar error:', error)

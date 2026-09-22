@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
+import { EventAvailabilityCalendar } from './EventAvailabilityCalendar'
 import type { UpcomingEvent } from '../data/upcomingEvents'
 
 const CATEGORY_OPTIONS = [
@@ -128,6 +129,22 @@ export function AddEventForm({
 
   return (
     <form onSubmit={handleSubmit} className="add-event-form">
+      <label className="field">
+        <span>Room</span>
+        <select value={room} onChange={(e) => setRoom(e.target.value as (typeof ROOM_OPTIONS)[number])}>
+          {ROOM_OPTIONS.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="field">
+        <span>Check availability &amp; pick a date</span>
+        <EventAvailabilityCalendar room={room} selectedDate={startDate} onSelectDate={setStartDate} />
+      </div>
+
       <div className="field-row">
         <label className="field">
           <span>Event date</span>
@@ -153,17 +170,6 @@ export function AddEventForm({
         <span>Category</span>
         <select value={category} onChange={(e) => setCategory(e.target.value)}>
           {CATEGORY_OPTIONS.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="field">
-        <span>Room</span>
-        <select value={room} onChange={(e) => setRoom(e.target.value as (typeof ROOM_OPTIONS)[number])}>
-          {ROOM_OPTIONS.map((opt) => (
             <option key={opt} value={opt}>
               {opt}
             </option>

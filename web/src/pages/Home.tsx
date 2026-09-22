@@ -29,13 +29,6 @@ export function Home() {
         </div>
       </section>
 
-      <section className="whats-on-splash">
-        <Link to="/events" className="whats-on-splash__link">
-          <span className="whats-on-splash__title">What's On!</span>
-          <span className="whats-on-splash__cta">See our upcoming events →</span>
-        </Link>
-      </section>
-
       <section className="section section--gallery-top">
         <Gallery />
       </section>

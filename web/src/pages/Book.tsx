@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiUrl } from '../lib/apiBase'
+import { EXEMPTION_LABELS, computeAmountBreakdown } from '../lib/bookingPricing'
 import functionRoomHirePdf from '../assets/MSV_Function_Room_Hire_Policy_and_Form.pdf'
 
 type BusySlot = { start: string; end: string }
@@ -28,12 +29,6 @@ type BookingConfirmation = {
   paymentMethod: 'online' | 'in_person'
 }
 
-const EXEMPTION_LABELS: Record<string, string> = {
-  none: 'None – Regular Hire (£25)',
-  adult_evening: 'Adult evening event (30+ bar users)',
-  funeral: 'Funeral / Wake',
-  charity: 'Charity Event',
-}
 
 const EMAIL_ADDRESS = 'merriottsocialvenue@gmail.com'
 
@@ -79,31 +74,6 @@ function formatTime(t: string) {
   const suffix = hour >= 12 ? 'pm' : 'am'
   const display = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
   return `${display}:${m}${suffix}`
-}
-
-// Hours (rounded up) between a requested earlier bar-opening time and the normal 7pm
-// opening — 0 if no time was requested, or the requested time isn't actually earlier.
-function computeBarSurchargeHours(barOpenTime: string) {
-  if (!barOpenTime) return 0
-  const [h, m] = barOpenTime.split(':').map(Number)
-  const diffMinutes = 19 * 60 - (h * 60 + m)
-  return diffMinutes > 0 ? Math.ceil(diffMinutes / 60) : 0
-}
-
-function computeAmountBreakdown(exemption: string, barOpenTime: string) {
-  const feeExempt = exemption === 'funeral' || exemption === 'charity'
-  const feeAmount = feeExempt ? 0 : 25
-  const depositAmount = 30
-  const barSurchargeHours = computeBarSurchargeHours(barOpenTime)
-  const barSurchargeAmount = barSurchargeHours * 15
-  return {
-    feeExempt,
-    feeAmount,
-    depositAmount,
-    barSurchargeHours,
-    barSurchargeAmount,
-    total: feeAmount + depositAmount + barSurchargeAmount,
-  }
 }
 
 function startOfMonth(d: Date) {

@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { AddEventForm } from '../components/AddEventForm'
-import { ManageUpcomingEvents } from '../components/ManageUpcomingEvents'
+import { NavLink, Outlet } from 'react-router-dom'
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
 const CREDENTIAL_STORAGE_KEY = 'msv_admin_credential'
@@ -10,6 +8,11 @@ declare global {
   interface Window {
     google?: any
   }
+}
+
+export type AdminOutletContext = {
+  credential: string
+  onCredentialInvalid: () => void
 }
 
 // Decodes the JWT payload for display only (e.g. "Signed in as ..."). This is never a
@@ -31,7 +34,10 @@ function readStoredCredential(): string | null {
   }
 }
 
-export function Admin() {
+const adminTabClass = ({ isActive }: { isActive: boolean }) =>
+  isActive ? 'admin-tab admin-tab--active' : 'admin-tab'
+
+export function AdminLayout() {
   const signInButtonRef = useRef<HTMLDivElement>(null)
   const [scriptReady, setScriptReady] = useState(false)
   const [credential, setCredential] = useState<string | null>(readStoredCredential)
@@ -39,7 +45,6 @@ export function Admin() {
     () => (credential && decodeEmailForDisplay(credential)) || null,
   )
   const [expiredNotice, setExpiredNotice] = useState(false)
-  const [manageListKey, setManageListKey] = useState(0)
 
   function signIn(newCredential: string) {
     setCredential(newCredential)
@@ -101,7 +106,7 @@ export function Admin() {
 
         {expiredNotice && (
           <p className="notice">
-            Please sign in again — your session may have expired, or that account isn't authorized to add events.
+            Please sign in again — your session may have expired, or that account isn't authorized.
           </p>
         )}
 
@@ -116,23 +121,19 @@ export function Admin() {
               </button>
             </p>
 
-            <div className="admin-tool">
-              <h2 className="section-title section-title--small">Add event</h2>
-              <AddEventForm
-                credential={credential}
-                onSaved={() => setManageListKey((k) => k + 1)}
-                onCredentialInvalid={() => signOut(true)}
-              />
-            </div>
+            <nav className="admin-tabs" aria-label="Admin sections">
+              <NavLink to="events" className={adminTabClass}>
+                Events
+              </NavLink>
+              <NavLink to="bookings" className={adminTabClass}>
+                Bookings
+              </NavLink>
+              <NavLink to="membership" className={adminTabClass}>
+                Membership
+              </NavLink>
+            </nav>
 
-            <div className="admin-tool">
-              <h2 className="section-title section-title--small">Manage upcoming events</h2>
-              <ManageUpcomingEvents key={manageListKey} credential={credential} onCredentialInvalid={() => signOut(true)} />
-            </div>
-
-            <p className="field-hint">
-              <Link to="/events">View the Events page →</Link>
-            </p>
+            <Outlet context={{ credential, onCredentialInvalid: () => signOut(true) } satisfies AdminOutletContext} />
           </>
         )}
       </div>

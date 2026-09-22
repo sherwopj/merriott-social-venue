@@ -21,6 +21,10 @@ const sheetId = process.env.GOOGLE_SHEET_ID
 const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:L1000'
 const sheetConfigured = Boolean(sheetId && serviceAccountJson)
 
+const bookingsSheetId = process.env.GOOGLE_BOOKINGS_SHEET_ID
+const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:X1000'
+const bookingsSheetConfigured = Boolean(bookingsSheetId && serviceAccountJson)
+
 const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID
 const googleOAuthClientId = process.env.GOOGLE_OAUTH_CLIENT_ID
 const googleOAuthClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET
@@ -32,7 +36,7 @@ const eventEditorEmails = (process.env.EVENT_EDITOR_EMAILS ?? '')
 
 let calendar: any = null
 let sheets: any = null
-if (calendarConfigured || sheetConfigured) {
+if (calendarConfigured || sheetConfigured || bookingsSheetConfigured) {
   try {
     let credentials: any = null
     const jsonStr = serviceAccountJson!.trim()
@@ -244,11 +248,11 @@ async function uploadPhoto(file: { buffer: Buffer; mimetype: string; originalnam
 }
 
 const sheetTabIdCache = new Map<string, number>()
-async function getSheetTabId(tabName?: string): Promise<number | null> {
-  const cacheKey = tabName ?? '__default__'
+async function getSheetTabId(targetSheetId: string, tabName?: string): Promise<number | null> {
+  const cacheKey = `${targetSheetId}:${tabName ?? '__default__'}`
   if (sheetTabIdCache.has(cacheKey)) return sheetTabIdCache.get(cacheKey)!
   try {
-    const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'sheets.properties' })
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: targetSheetId, fields: 'sheets.properties' })
     const sheetsList = meta.data.sheets ?? []
     const match = tabName
       ? sheetsList.find((s: any) => s.properties?.title === tabName)
@@ -651,7 +655,7 @@ app.delete('/api/upcoming-events/:id', async (req, res) => {
     await deleteDriveFile(imageUrl)
   }
 
-  const tabId = await getSheetTabId()
+  const tabId = await getSheetTabId(sheetId!)
   if (tabId === null) {
     res.status(502).json({ error: 'Could not resolve the sheet to delete from.' })
     return
@@ -774,37 +778,47 @@ function formatAmountBreakdown(amounts: ReturnType<typeof computeAmountDue>, bar
   return lines
 }
 
-function paymentStatusLine(paymentMethod: 'online' | 'in_person', total: number): string {
+function paymentStatusLine(paymentMethod: 'online' | 'in_person', paid: boolean, total: number): string {
+  if (!paid) return `${formatPounds(total)} still owing — to be paid in person at the venue.`
   return paymentMethod === 'online'
     ? `${formatPounds(total)} received online via card (Stripe).`
-    : `${formatPounds(total)} still owing — to be paid in person at the venue.`
+    : `${formatPounds(total)} received in person.`
 }
 
-// Shared by the in-person path (called directly) and the Stripe webhook (called once payment
-// is confirmed) — this is the only place that actually creates the Calendar event and email.
-async function createBookingRecord(
-  fields: BookingFields,
+function buildBookingEventSummary(
+  name: string,
+  phone: string,
   reference: string,
-  paymentMethod: 'online' | 'in_person',
-  paymentIntentId?: string,
-): Promise<void> {
-  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, sendCopyToHirer, barOpenTime } = fields
-  const amounts = computeAmountDue(exemption, barOpenTime)
-  const breakdownLines = formatAmountBreakdown(amounts, barOpenTime)
-  const paymentLine = paymentStatusLine(paymentMethod, amounts.total)
-  const paymentStatusTag = paymentMethod === 'online' ? 'PAID' : 'AWAITING PAYMENT'
+  status: BookingStatus,
+  paid: boolean,
+): string {
+  const tag = paid ? 'PAID' : 'AWAITING PAYMENT'
+  const prefix = status === 'confirmed' ? '' : 'PROVISIONAL: '
+  return `${prefix}${name} [${tag}] - ${phone} (Ref: ${reference})`
+}
 
-  console.info('[booking]', {
-    reference, name, email, phone, address, date,
-    startTime, endTime, eventType, attendees, exemption, notes, barOpenTime, paymentMethod,
-    amountDue: amounts.total,
-  })
-
-  let htmlLink = ''
-  if (calendar && calendarId) {
-    try {
-      const eventSummary = `PROVISIONAL: ${name} [${paymentStatusTag}] - ${phone} (Ref: ${reference})`
-      const eventDescription = `Provisional Booking Request
+function buildBookingEventDescription(params: {
+  reference: string
+  paymentLine: string
+  breakdownLines: string[]
+  paymentIntentId?: string
+  name: string
+  email: string
+  phone: string
+  address?: string
+  date: string
+  startTime?: string
+  endTime?: string
+  eventType?: string
+  attendees?: string | number
+  exemption?: string
+  notes?: string
+}): string {
+  const {
+    reference, paymentLine, breakdownLines, paymentIntentId,
+    name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes,
+  } = params
+  return `Provisional Booking Request
 Reference: ${reference}
 
 Payment: ${paymentLine}
@@ -826,6 +840,200 @@ Booking Details:
 Additional Notes:
 ${notes || 'None'}
 `
+}
+
+// ---- Bookings (Google Sheet, written to by the public booking flow and the admin tools) ----
+
+type BookingStatus = 'provisional' | 'confirmed' | 'cancelled'
+
+type BookingRecord = {
+  reference: string // stable key, column B
+  row?: number // current row at the time of the read; never trust this across requests
+  status: BookingStatus
+  paymentMethod: 'online' | 'in_person'
+  paid: boolean
+  date: string
+  startTime: string
+  endTime: string
+  eventType: string
+  attendees: string
+  exemption: string
+  barOpenTime: string
+  notes: string
+  name: string
+  email: string
+  phone: string
+  address: string
+  feeAmount: number
+  depositAmount: number
+  barSurchargeAmount: number
+  total: number
+  calendarEventId?: string
+  paymentIntentId?: string
+  createdBy: string
+}
+
+function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
+  const [
+    , reference, status, paymentMethod, paid, date, startTime, endTime,
+    eventType, attendees, exemption, barOpenTime, notes, name, email, phone, address,
+    feeAmount, depositAmount, barSurchargeAmount, total, calendarEventId, paymentIntentId, createdBy,
+  ] = row
+  if (!reference || !reference.trim()) return null
+
+  return {
+    reference: reference.trim(),
+    status: status === 'confirmed' || status === 'cancelled' ? status : 'provisional',
+    paymentMethod: paymentMethod === 'online' ? 'online' : 'in_person',
+    paid: parseYesNo(paid),
+    date: date ?? '',
+    startTime: startTime ?? '',
+    endTime: endTime ?? '',
+    eventType: eventType ?? '',
+    attendees: attendees ?? '',
+    exemption: exemption && exemption.trim() ? exemption.trim() : 'none',
+    barOpenTime: barOpenTime ?? '',
+    notes: notes ?? '',
+    name: name ?? '',
+    email: email ?? '',
+    phone: phone ?? '',
+    address: address ?? '',
+    feeAmount: Number(feeAmount) || 0,
+    depositAmount: Number(depositAmount) || 0,
+    barSurchargeAmount: Number(barSurchargeAmount) || 0,
+    total: Number(total) || 0,
+    calendarEventId: calendarEventId && calendarEventId.trim() ? calendarEventId.trim() : undefined,
+    paymentIntentId: paymentIntentId && paymentIntentId.trim() ? paymentIntentId.trim() : undefined,
+    createdBy: createdBy && createdBy.trim() ? createdBy.trim() : 'website',
+  }
+}
+
+function parseBookingRows(rows: string[][]): BookingRecord[] {
+  const bookings: BookingRecord[] = []
+  rows.forEach((row, index) => {
+    const parsed = parseBookingRow(row)
+    if (parsed) bookings.push({ ...parsed, row: index + 2 })
+  })
+  return bookings
+}
+
+function bookingRowValues(b: {
+  reference: string
+  status: BookingStatus
+  paymentMethod: 'online' | 'in_person'
+  paid: boolean
+  date: string
+  startTime: string
+  endTime: string
+  eventType: string
+  attendees: string | number | undefined
+  exemption: string
+  barOpenTime: string
+  notes: string
+  name: string
+  email: string
+  phone: string
+  address: string
+  feeAmount: number
+  depositAmount: number
+  barSurchargeAmount: number
+  total: number
+  calendarEventId: string
+  paymentIntentId: string
+  createdBy: string
+}): string[] {
+  return [
+    new Date().toISOString(),
+    b.reference,
+    b.status,
+    b.paymentMethod,
+    b.paid ? 'Yes' : 'No',
+    b.date,
+    b.startTime,
+    b.endTime,
+    b.eventType,
+    String(b.attendees ?? ''),
+    b.exemption || 'none',
+    b.barOpenTime,
+    b.notes,
+    b.name,
+    b.email,
+    b.phone,
+    b.address,
+    String(b.feeAmount),
+    String(b.depositAmount),
+    String(b.barSurchargeAmount),
+    String(b.total),
+    b.calendarEventId,
+    b.paymentIntentId,
+    b.createdBy,
+  ]
+}
+
+// Finds the row currently holding the given reference (column B) with a fresh read — never
+// trusts a row number from an earlier request, since rows shift after any delete — and
+// returns it already parsed, since every admin action needs both.
+async function getBookingByReference(reference: string): Promise<{ row: number; booking: BookingRecord } | null> {
+  try {
+    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:X' })
+    const rows: string[][] = response.data.values || []
+    const index = rows.findIndex((row) => (row[1] ?? '').trim() === reference)
+    if (index === -1) return null
+    const parsed = parseBookingRow(rows[index])
+    if (!parsed) return null
+    return { row: index + 1, booking: { ...parsed, row: index + 1 } } // rows[] is 0-indexed from row 1 (the header)
+  } catch (e) {
+    console.error(`[bookings] Failed to look up booking ${reference}:`, e)
+    return null
+  }
+}
+
+async function getNextEmptyBookingRow(): Promise<number> {
+  const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:A' })
+  const rows: string[][] = response.data.values || []
+  return rows.length + 1
+}
+
+// Shared by the in-person path (called directly) and the Stripe webhook (called once payment
+// is confirmed) — this is the only place that actually creates the Calendar event and email.
+async function createBookingRecord(
+  fields: BookingFields,
+  reference: string,
+  paymentMethod: 'online' | 'in_person',
+  options: {
+    paymentIntentId?: string
+    paid?: boolean
+    createdBy?: string
+    notifyCommittee?: boolean
+  } = {},
+): Promise<void> {
+  const {
+    paymentIntentId,
+    paid = paymentMethod === 'online',
+    createdBy = 'website',
+    notifyCommittee = true,
+  } = options
+  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, sendCopyToHirer, barOpenTime } = fields
+  const amounts = computeAmountDue(exemption, barOpenTime)
+  const breakdownLines = formatAmountBreakdown(amounts, barOpenTime)
+  const paymentLine = paymentStatusLine(paymentMethod, paid, amounts.total)
+  const paymentStatusTag = paid ? 'PAID' : 'AWAITING PAYMENT'
+
+  console.info('[booking]', {
+    reference, name, email, phone, address, date,
+    startTime, endTime, eventType, attendees, exemption, notes, barOpenTime, paymentMethod, paid, createdBy,
+    amountDue: amounts.total,
+  })
+
+  let htmlLink = ''
+  let calendarEventId = ''
+  if (calendar && calendarId) {
+    try {
+      const eventSummary = buildBookingEventSummary(name, phone, reference, 'provisional', paid)
+      const eventDescription = buildBookingEventDescription({
+        reference, paymentLine, breakdownLines, paymentIntentId,
+        name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes,
+      })
       const calendarRes = await calendar.events.insert({
         calendarId,
         requestBody: {
@@ -836,6 +1044,7 @@ ${notes || 'None'}
         },
       })
       htmlLink = calendarRes.data.htmlLink || ''
+      calendarEventId = calendarRes.data.id || ''
       console.log(`[booking] Google Calendar event created: ${htmlLink}`)
     } catch (e) {
       console.error('[booking] Failed to create Google Calendar event:', e)
@@ -845,7 +1054,7 @@ ${notes || 'None'}
   }
 
   // Send email via Resend
-  if (emailConfigured && resend) {
+  if (notifyCommittee && emailConfigured && resend) {
     try {
       const recipient = process.env.NOTIFICATION_EMAIL_TO || 'merriottsocialvenue@gmail.com'
       const fromAddress = process.env.EMAIL_FROM || 'bookings@merriottsocialvenue.co.uk'
@@ -894,7 +1103,7 @@ ${notes || 'None'}
           ${calendarLinkSection}
           ${paymentLinkSection}
 
-          <p>Please check the calendar, then get in touch with the hirer to confirm${paymentMethod === 'in_person' ? ' and take payment' : ''}.</p>
+          <p>Please check the calendar, then get in touch with the hirer to confirm${!paid ? ' and take payment' : ''}.</p>
         `,
       })
 
@@ -906,8 +1115,50 @@ ${notes || 'None'}
     } catch (e) {
       console.error('[booking] Failed to send notification email:', e)
     }
-  } else {
+  } else if (notifyCommittee) {
     console.warn('[booking] Resend not configured. Notification email skipped.')
+  }
+
+  if (sheets && bookingsSheetConfigured) {
+    try {
+      const nextRow = await getNextEmptyBookingRow()
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: bookingsSheetId,
+        range: `A${nextRow}:X${nextRow}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [bookingRowValues({
+            reference,
+            status: 'provisional',
+            paymentMethod,
+            paid,
+            date,
+            startTime: startTime || '',
+            endTime: endTime || '',
+            eventType: eventType || '',
+            attendees,
+            exemption: exemption || 'none',
+            barOpenTime: barOpenTime || '',
+            notes: notes || '',
+            name,
+            email,
+            phone,
+            address: address || '',
+            feeAmount: amounts.feeAmount,
+            depositAmount: amounts.depositAmount,
+            barSurchargeAmount: amounts.barSurchargeAmount,
+            total: amounts.total,
+            calendarEventId,
+            paymentIntentId: paymentIntentId || '',
+            createdBy,
+          })],
+        },
+      })
+    } catch (e) {
+      // Best-effort: the Calendar event and email (the parts that actually reach the hirer
+      // and committee) already succeeded, so a sheet outage shouldn't fail the booking.
+      console.error(`[bookings] Failed to save booking ${reference} to the sheet (continuing):`, e)
+    }
   }
 }
 
@@ -1076,12 +1327,324 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         barOpenTime: metadata.barOpenTime || undefined,
       }
       const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
-      await createBookingRecord(fields, metadata.reference ?? session.id, 'online', paymentIntentId)
+      await createBookingRecord(fields, metadata.reference ?? session.id, 'online', { paymentIntentId })
       console.info(`[bookings] Booking ${metadata.reference} created from paid Stripe session ${session.id}`)
     }
   }
 
   res.json({ received: true })
+})
+
+// ---- Admin: manage bookings (create/edit/confirm/cancel) ----
+
+app.get('/api/admin/bookings', async (req, res) => {
+  const editorEmail = await verifyEditorEmail(req.headers.authorization)
+  if (!editorEmail) {
+    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
+    return
+  }
+  if (!sheets || !bookingsSheetConfigured) {
+    res.json({ sheetConfigured: false, bookings: [] })
+    return
+  }
+
+  try {
+    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: bookingsSheetRange })
+    const bookings = parseBookingRows(response.data.values || [])
+    res.json({ sheetConfigured: true, bookings })
+  } catch (e) {
+    console.error('[bookings] Failed to load bookings sheet:', e)
+    res.status(502).json({ error: 'Failed to load bookings.' })
+  }
+})
+
+app.post('/api/admin/bookings', async (req, res) => {
+  const editorEmail = await verifyEditorEmail(req.headers.authorization)
+  if (!editorEmail) {
+    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
+    return
+  }
+
+  const {
+    name, email, phone, address, date, startTime, endTime, eventType, attendees,
+    exemption, notes, barOpenTime, paymentMethod, paid,
+  } = req.body ?? {}
+
+  if (!name || !email || !phone || !date) {
+    res.status(400).json({ error: 'name, email, phone, and date are required.' })
+    return
+  }
+  if (paymentMethod !== 'online' && paymentMethod !== 'in_person') {
+    res.status(400).json({ error: 'paymentMethod must be "online" or "in_person".' })
+    return
+  }
+
+  const reference = `MSV-${Date.now().toString(36).toUpperCase()}`
+  const fields: BookingFields = {
+    name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes,
+    sendCopyToHirer: false,
+    barOpenTime: barOpenTime || undefined,
+  }
+
+  await createBookingRecord(fields, reference, paymentMethod, {
+    paid: Boolean(paid),
+    createdBy: editorEmail,
+    notifyCommittee: false,
+  })
+
+  console.info(`[bookings] ${reference} created directly by admin ${editorEmail}`)
+  res.status(201).json({ ok: true, reference })
+})
+
+app.put('/api/admin/bookings/:reference', async (req, res) => {
+  const editorEmail = await verifyEditorEmail(req.headers.authorization)
+  if (!editorEmail) {
+    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
+    return
+  }
+  if (!sheets || !bookingsSheetConfigured) {
+    res.status(503).json({ error: 'Bookings sheet is not configured on the server.' })
+    return
+  }
+
+  // Exemption and bar-opening time determine the price, so editing is refused if either is
+  // present — the UI never sends them, but the server enforces it independently too.
+  if (req.body && ('exemption' in req.body || 'barOpenTime' in req.body)) {
+    res.status(400).json({
+      error: "Exemption status and bar-opening time can't be edited — they determine the price. Cancel and create a new booking instead.",
+    })
+    return
+  }
+
+  const reference = req.params.reference
+  const found = await getBookingByReference(reference)
+  if (!found) {
+    res.status(404).json({ error: 'Booking not found — it may already have been cancelled elsewhere.' })
+    return
+  }
+  const { row, booking: existing } = found
+
+  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, notes } = req.body ?? {}
+  if (!name || !email || !phone || !date) {
+    res.status(400).json({ error: 'name, email, phone, and date are required.' })
+    return
+  }
+
+  const updated: Omit<BookingRecord, 'row'> = {
+    reference: existing.reference,
+    status: existing.status,
+    paymentMethod: existing.paymentMethod,
+    paid: existing.paid,
+    exemption: existing.exemption,
+    barOpenTime: existing.barOpenTime,
+    feeAmount: existing.feeAmount,
+    depositAmount: existing.depositAmount,
+    barSurchargeAmount: existing.barSurchargeAmount,
+    total: existing.total,
+    calendarEventId: existing.calendarEventId,
+    paymentIntentId: existing.paymentIntentId,
+    createdBy: existing.createdBy,
+    name: String(name).trim(),
+    email: String(email).trim(),
+    phone: String(phone).trim(),
+    address: address ? String(address).trim() : '',
+    date: String(date),
+    startTime: startTime ? String(startTime) : '',
+    endTime: endTime ? String(endTime) : '',
+    eventType: eventType ? String(eventType).trim() : '',
+    attendees: attendees !== undefined && attendees !== null ? String(attendees) : existing.attendees,
+    notes: notes ? String(notes).trim() : '',
+  }
+
+  if (calendar && calendarId && existing.calendarEventId) {
+    try {
+      const amounts = computeAmountDue(existing.exemption, existing.barOpenTime)
+      const breakdownLines = formatAmountBreakdown(amounts, existing.barOpenTime)
+      const paymentLine = paymentStatusLine(existing.paymentMethod, existing.paid, existing.total)
+      await calendar.events.update({
+        calendarId,
+        eventId: existing.calendarEventId,
+        requestBody: {
+          summary: buildBookingEventSummary(updated.name, updated.phone, reference, existing.status, existing.paid),
+          description: buildBookingEventDescription({
+            reference, paymentLine, breakdownLines, paymentIntentId: existing.paymentIntentId,
+            name: updated.name, email: updated.email, phone: updated.phone, address: updated.address,
+            date: updated.date, startTime: updated.startTime, endTime: updated.endTime, eventType: updated.eventType,
+            attendees: updated.attendees, exemption: existing.exemption, notes: updated.notes,
+          }),
+          start: { dateTime: `${updated.date}T${updated.startTime || '00:00'}:00`, timeZone: 'Europe/London' },
+          end: { dateTime: `${updated.date}T${updated.endTime || '00:00'}:00`, timeZone: 'Europe/London' },
+        },
+      })
+    } catch (e) {
+      console.error(`[bookings] Failed to update calendar event for ${reference} (continuing):`, e)
+    }
+  }
+
+  try {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: bookingsSheetId,
+      range: `A${row}:X${row}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [bookingRowValues({
+          ...updated,
+          calendarEventId: updated.calendarEventId || '',
+          paymentIntentId: updated.paymentIntentId || '',
+        })],
+      },
+    })
+  } catch (e) {
+    console.error(`[bookings] Failed to save edits to ${reference} (by ${editorEmail}):`, e)
+    res.status(502).json({ error: 'Failed to save changes to the sheet.' })
+    return
+  }
+
+  console.info(`[bookings] ${reference} edited by ${editorEmail}`)
+  res.json({ booking: { ...updated, row } })
+})
+
+app.post('/api/admin/bookings/:reference/confirm', async (req, res) => {
+  const editorEmail = await verifyEditorEmail(req.headers.authorization)
+  if (!editorEmail) {
+    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
+    return
+  }
+  if (!sheets || !bookingsSheetConfigured) {
+    res.status(503).json({ error: 'Bookings sheet is not configured on the server.' })
+    return
+  }
+
+  const reference = req.params.reference
+  const found = await getBookingByReference(reference)
+  if (!found) {
+    res.status(404).json({ error: 'Booking not found — it may already have been cancelled elsewhere.' })
+    return
+  }
+  const { row, booking: existing } = found
+
+  if (existing.status === 'cancelled') {
+    res.status(400).json({ error: "This booking has been cancelled and can't be confirmed." })
+    return
+  }
+
+  if (calendar && calendarId && existing.calendarEventId) {
+    try {
+      await calendar.events.patch({
+        calendarId,
+        eventId: existing.calendarEventId,
+        requestBody: {
+          summary: buildBookingEventSummary(existing.name, existing.phone, reference, 'confirmed', existing.paid),
+        },
+      })
+    } catch (e) {
+      console.error(`[bookings] Failed to update calendar event for ${reference} (continuing):`, e)
+    }
+  }
+
+  try {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: bookingsSheetId,
+      range: `A${row}:X${row}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [bookingRowValues({
+          ...existing,
+          status: 'confirmed',
+          calendarEventId: existing.calendarEventId || '',
+          paymentIntentId: existing.paymentIntentId || '',
+        })],
+      },
+    })
+  } catch (e) {
+    console.error(`[bookings] Failed to save confirmation for ${reference} (by ${editorEmail}):`, e)
+    res.status(502).json({ error: 'Failed to save the confirmation to the sheet.' })
+    return
+  }
+
+  console.info(`[bookings] ${reference} confirmed by ${editorEmail}`)
+  res.json({ booking: { ...existing, status: 'confirmed' } })
+})
+
+app.delete('/api/admin/bookings/:reference', async (req, res) => {
+  const editorEmail = await verifyEditorEmail(req.headers.authorization)
+  if (!editorEmail) {
+    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
+    return
+  }
+  if (!sheets || !bookingsSheetConfigured) {
+    res.status(503).json({ error: 'Bookings sheet is not configured on the server.' })
+    return
+  }
+
+  const reference = req.params.reference
+  const found = await getBookingByReference(reference)
+  if (!found) {
+    res.status(404).json({ error: 'Booking not found — it may already have been cancelled elsewhere.' })
+    return
+  }
+  const { row, booking: existing } = found
+
+  // Best-effort: delete the Calendar event, but a failure here shouldn't block the
+  // cancellation itself from being recorded.
+  if (calendar && calendarId && existing.calendarEventId) {
+    try {
+      await calendar.events.delete({ calendarId, eventId: existing.calendarEventId })
+    } catch (e) {
+      console.warn(`[bookings] Failed to delete calendar event for ${reference} (continuing):`, e)
+    }
+  }
+
+  try {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: bookingsSheetId,
+      range: `A${row}:X${row}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [bookingRowValues({
+          ...existing,
+          status: 'cancelled',
+          calendarEventId: existing.calendarEventId || '',
+          paymentIntentId: existing.paymentIntentId || '',
+        })],
+      },
+    })
+  } catch (e) {
+    console.error(`[bookings] Failed to save cancellation for ${reference} (by ${editorEmail}):`, e)
+    res.status(502).json({ error: 'Failed to save the cancellation to the sheet.' })
+    return
+  }
+
+  // The booking stays on the sheet with status=cancelled (not removed) — it's the record
+  // that flags a paid-online booking still needs a manual refund in the Stripe Dashboard.
+  if (emailConfigured && resend && existing.email) {
+    try {
+      const fromAddress = process.env.EMAIL_FROM || 'bookings@merriottsocialvenue.co.uk'
+      const { error } = await resend.emails.send({
+        from: fromAddress,
+        to: existing.email,
+        subject: `Your booking has been cancelled (Ref: ${reference})`,
+        html: `
+          <h2>Booking Cancelled</h2>
+          <p>Hi ${existing.name || 'there'},</p>
+          <p>Your provisional booking request for <strong>${existing.date}</strong>
+          (Ref: <strong>${reference}</strong>) has been cancelled.</p>
+          <p>If you have any questions, or if you believe this was a mistake, please get in
+          touch with us at merriottsocialvenue@gmail.com or 07471 593040.</p>
+        `,
+      })
+      if (error) {
+        console.error(`[bookings] Failed to send cancellation email for ${reference}:`, error)
+      } else {
+        console.log(`[bookings] Cancellation email sent to ${existing.email} for ${reference}`)
+      }
+    } catch (e) {
+      console.error(`[bookings] Failed to send cancellation email for ${reference}:`, e)
+    }
+  }
+
+  console.info(`[bookings] ${reference} cancelled by ${editorEmail}`)
+  res.json({ ok: true })
 })
 
 app.use((_req, res) => {

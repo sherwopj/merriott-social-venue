@@ -487,6 +487,13 @@
   background: var(--color-bg-elevated);
 }
 
+.manage-event-row__thumb--icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent);
+}
+
 .manage-event-row__info {
   flex: 1;
   min-width: 0;

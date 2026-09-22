@@ -191,6 +191,15 @@ const CATEGORY_MAP: Record<string, { icon: IconName; kicker: string }> = {
 }
 const DEFAULT_CATEGORY = { icon: 'discoBall' as IconName, kicker: 'Special Event' }
 
+// A row's Category column is sometimes blank or doesn't match a known option (rows added
+// or edited outside the admin form). Before falling back to the generic default icon, take
+// a guess from the description text — "live music"/"band" reads as Live Band, for example.
+function inferCategoryFromDescription(description: string): { icon: IconName; kicker: string } | null {
+  const text = description.toLowerCase()
+  if (/live music|\bband\b/.test(text)) return CATEGORY_MAP['live band']
+  return null
+}
+
 function parseSheetDate(raw: string | undefined): string | null {
   const s = (raw ?? '').trim()
   if (!s) return null
@@ -302,7 +311,10 @@ function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
       return
     }
 
-    const categoryInfo = CATEGORY_MAP[(category ?? '').trim().toLowerCase()] ?? DEFAULT_CATEGORY
+    const categoryInfo =
+      CATEGORY_MAP[(category ?? '').trim().toLowerCase()] ??
+      inferCategoryFromDescription(description ?? '') ??
+      DEFAULT_CATEGORY
     if (category && !CATEGORY_MAP[category.trim().toLowerCase()]) {
       console.warn(`[upcoming-events] Row ${index + 2}: unrecognized category "${category}", using default`)
     }

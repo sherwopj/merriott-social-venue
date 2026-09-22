@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
 import type { UpcomingEvent } from '../data/upcomingEvents'
 import { AddEventForm } from './AddEventForm'
+import { EventIcon } from './EventIcon'
 
 type UpcomingEventsResponse = {
   sheetConfigured: boolean
@@ -85,7 +86,9 @@ export function ManageUpcomingEvents({
               {ev.image ? (
                 <img src={ev.image} alt="" className="manage-event-row__thumb" />
               ) : (
-                <div className="manage-event-row__thumb" />
+                <div className="manage-event-row__thumb manage-event-row__thumb--icon">
+                  <EventIcon name={ev.icon} />
+                </div>
               )}
               <div className="manage-event-row__info">
                 <p className="manage-event-row__date">

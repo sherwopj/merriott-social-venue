@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { weekdayOrder, weekdayLabels, weeklyEvents } from '../data/weeklyEvents'
 import { upcomingEvents as fallbackUpcomingEvents, type UpcomingEvent } from '../data/upcomingEvents'
 import { EventIcon } from '../components/EventIcon'
@@ -61,9 +60,6 @@ export function Events() {
           <div className="events-column events-column--upcoming">
             <div className="events-column__heading">
               <h2 className="section-title">Upcoming events</h2>
-              <Link to="/admin" className="small muted">
-                Committee member? Add an event →
-              </Link>
             </div>
 
             <ul className="upcoming-events">

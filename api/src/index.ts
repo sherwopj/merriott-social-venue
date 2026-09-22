@@ -792,6 +792,7 @@ async function createBookingRecord(
   const amounts = computeAmountDue(exemption, barOpenTime)
   const breakdownLines = formatAmountBreakdown(amounts, barOpenTime)
   const paymentLine = paymentStatusLine(paymentMethod, amounts.total)
+  const paymentStatusTag = paymentMethod === 'online' ? 'PAID' : 'AWAITING PAYMENT'
 
   console.info('[booking]', {
     reference, name, email, phone, address, date,
@@ -802,7 +803,7 @@ async function createBookingRecord(
   let htmlLink = ''
   if (calendar && calendarId) {
     try {
-      const eventSummary = `PROVISIONAL: ${name} - ${phone} (Ref: ${reference})`
+      const eventSummary = `PROVISIONAL: ${name} [${paymentStatusTag}] - ${phone} (Ref: ${reference})`
       const eventDescription = `Provisional Booking Request
 Reference: ${reference}
 
@@ -865,7 +866,7 @@ ${notes || 'None'}
       const { error } = await resend.emails.send({
         from: fromAddress,
         to: recipients,
-        subject: `Provisional Booking Request: ${name} (Ref: ${reference})`,
+        subject: `Provisional Booking Request: ${name} [${paymentStatusTag}] (Ref: ${reference})`,
         html: `
           <h2>New Provisional Booking Request</h2>
           <p>A new request has been submitted with reference <strong>${reference}</strong>.</p>

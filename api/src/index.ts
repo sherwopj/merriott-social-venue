@@ -185,7 +185,7 @@ const CATEGORY_MAP: Record<string, { icon: IconName; kicker: string }> = {
   'disco night': { icon: 'discoBall', kicker: 'Disco Night' },
   'tribute show': { icon: 'starMic', kicker: 'Tribute Show' },
   'dj night': { icon: 'vinylRecord', kicker: 'DJ Night' },
-  'live band': { icon: 'guitarBand', kicker: 'Live Band' },
+  'live band': { icon: 'starMic', kicker: 'Live Band' },
   'bbq / street party': { icon: 'bbqFlag', kicker: 'Celebration' },
   'christmas / winter': { icon: 'santaHat', kicker: 'Celebration' },
   'cabaret show': { icon: 'feathers', kicker: 'Cabaret Show' },

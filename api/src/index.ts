@@ -19,7 +19,7 @@ const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 const calendarConfigured = Boolean(calendarId && serviceAccountJson)
 
 const sheetId = process.env.GOOGLE_SHEET_ID
-const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:M1000'
+const sheetRange = process.env.GOOGLE_SHEET_RANGE || 'A2:N1000'
 const sheetConfigured = Boolean(sheetId && serviceAccountJson)
 
 const ROOMS = ['MSV Function Room', 'MSV Front Bar'] as const
@@ -158,12 +158,11 @@ type IconName =
   | 'feathers'
 
 type UpcomingEvent = {
-  id: string // stable UID (sheet column L) once set; falls back to a date+title slug for
-  // legacy rows created before that column existed — those aren't editable/deletable
-  // through the API until re-created, since there's no stable key to find them by.
+  id: string // stable UID once set; falls back to a date+title slug for legacy rows created
+  // before that column existed — those aren't editable/deletable through the API until
+  // re-created, since there's no stable key to find them by.
   row?: number // current row at the time of the read; never trust this across requests
-  startDate: string
-  endDate?: string
+  startDate: string // events are always single-day now — this is simply "the date"
   title: string
   description: string
   category?: string // raw category string, e.g. for pre-filling an edit form's dropdown
@@ -175,6 +174,8 @@ type UpcomingEvent = {
   calendarEventId?: string
   calendarEventLink?: string
   room: Room
+  startTime: string
+  endTime: string
 }
 
 // Keyed by the Form's "Category" dropdown option (case-insensitive).
@@ -204,13 +205,6 @@ function parseSheetDate(raw: string | undefined): string | null {
 
 function parseYesNo(raw: string | undefined): boolean {
   return /^y(es)?$/i.test((raw ?? '').trim())
-}
-
-function addDays(dateStr: string, days: number): string {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const date = new Date(Date.UTC(y, m - 1, d))
-  date.setUTCDate(date.getUTCDate() + days)
-  return date.toISOString().slice(0, 10)
 }
 
 function slugify(text: string): string {
@@ -284,30 +278,30 @@ function buildCalendarEventBody(
   description: string,
   kicker: string,
   editorEmail: string,
-  startDate: string,
-  endDate: string,
+  date: string,
+  startTime: string,
+  endTime: string,
 ) {
   return {
     summary: title,
     description: `${description}\n\nCategory: ${kicker}\nAdded via website by ${editorEmail}`,
-    start: { date: startDate },
-    end: { date: addDays(endDate || startDate, 1) },
+    start: { dateTime: `${date}T${startTime}:00`, timeZone: 'Europe/London' },
+    end: { dateTime: `${date}T${endTime}:00`, timeZone: 'Europe/London' },
   }
 }
 
 function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
   const events: UpcomingEvent[] = []
   rows.forEach((row, index) => {
-    const [, rawStart, rawEnd, title, description, category, ticketed, tbc, photoDirectUrl, calendarEventId, calendarEventLink, uid, room] = row
+    const [, rawDate, title, description, category, ticketed, tbc, photoDirectUrl, calendarEventId, calendarEventLink, uid, room, startTime, endTime] = row
     if (!title || !title.trim()) return
 
-    const startDate = parseSheetDate(rawStart)
+    const startDate = parseSheetDate(rawDate)
     if (!startDate) {
       console.warn(`[upcoming-events] Skipping row ${index + 2}: unparseable or missing date`)
       return
     }
 
-    const endDate = parseSheetDate(rawEnd) ?? undefined
     const categoryInfo = CATEGORY_MAP[(category ?? '').trim().toLowerCase()] ?? DEFAULT_CATEGORY
     if (category && !CATEGORY_MAP[category.trim().toLowerCase()]) {
       console.warn(`[upcoming-events] Row ${index + 2}: unrecognized category "${category}", using default`)
@@ -317,7 +311,6 @@ function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
       id: uid && uid.trim() ? uid.trim() : `${startDate}-${slugify(title)}`,
       row: index + 2,
       startDate,
-      endDate,
       title: title.trim(),
       description: (description ?? '').trim(),
       category: category && category.trim() ? category.trim() : undefined,
@@ -329,18 +322,20 @@ function parseUpcomingEventsRows(rows: string[][]): UpcomingEvent[] {
       calendarEventId: calendarEventId && calendarEventId.trim() ? calendarEventId.trim() : undefined,
       calendarEventLink: calendarEventLink && calendarEventLink.trim() ? calendarEventLink.trim() : undefined,
       room: (ROOMS as readonly string[]).includes((room ?? '').trim()) ? (room.trim() as Room) : DEFAULT_ROOM,
+      startTime: startTime && startTime.trim() ? startTime.trim() : '18:00',
+      endTime: endTime && endTime.trim() ? endTime.trim() : '22:00',
     })
   })
   return events
 }
 
-// Finds the row currently holding the given UID (column L) with a fresh read — never trusts
+// Finds the row currently holding the given UID (column K) with a fresh read — never trusts
 // a row number from an earlier request, since rows shift after any delete.
 async function findRowByUid(uid: string): Promise<number | null> {
   try {
-    const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: 'A:L' })
+    const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: 'A:N' })
     const rows: string[][] = response.data.values || []
-    const index = rows.findIndex((row) => (row[11] ?? '').trim() === uid)
+    const index = rows.findIndex((row) => (row[10] ?? '').trim() === uid)
     return index === -1 ? null : index + 1 // rows[] is 0-indexed from row 1 (the header)
   } catch (e) {
     console.error(`[upcoming-events] Failed to look up row for uid ${uid}:`, e)
@@ -411,19 +406,19 @@ app.post(
       return
     }
 
-    const { title, description, category, startDate, endDate, ticketed, tbc, room } = req.body ?? {}
+    const { title, description, category, startDate, startTime, endTime, ticketed, tbc, room } = req.body ?? {}
     const categoryInfo = category ? CATEGORY_MAP[String(category).trim().toLowerCase()] : undefined
     const parsedStartDate = typeof startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : null
     const resolvedRoom: Room = (ROOMS as readonly string[]).includes(room) ? room : DEFAULT_ROOM
+    const parsedStartTime = typeof startTime === 'string' && /^\d{2}:\d{2}$/.test(startTime) ? startTime : null
+    const parsedEndTime = typeof endTime === 'string' && /^\d{2}:\d{2}$/.test(endTime) ? endTime : null
 
-    if (!title || !description || !categoryInfo || !parsedStartDate) {
+    if (!title || !description || !categoryInfo || !parsedStartDate || !parsedStartTime || !parsedEndTime) {
       res.status(400).json({
-        error: 'title, description, a valid startDate (YYYY-MM-DD), and a recognized category are required.',
+        error: 'title, description, a valid date, start/end time, and a recognized category are required.',
       })
       return
     }
-    const parsedEndDate =
-      typeof endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : ''
 
     const file = (req as any).file as { buffer: Buffer; mimetype: string; originalname: string } | undefined
     const photoDirectUrl = file ? await uploadPhoto(file) : ''
@@ -441,7 +436,8 @@ app.post(
             categoryInfo.kicker,
             editorEmail,
             parsedStartDate,
-            parsedEndDate,
+            parsedStartTime,
+            parsedEndTime,
           ),
         })
         calendarEventId = created.data.id ?? ''
@@ -459,13 +455,12 @@ app.post(
       const nextRow = await getNextEmptyRow()
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `A${nextRow}:M${nextRow}`,
+        range: `A${nextRow}:N${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[
             new Date().toISOString(),
             parsedStartDate,
-            parsedEndDate,
             String(title).trim(),
             String(description).trim(),
             String(category).trim(),
@@ -476,6 +471,8 @@ app.post(
             calendarEventLink,
             uid,
             resolvedRoom,
+            parsedStartTime,
+            parsedEndTime,
           ]],
         },
       })
@@ -492,7 +489,6 @@ app.post(
       event: {
         id: uid,
         startDate: parsedStartDate,
-        endDate: parsedEndDate || undefined,
         title: String(title).trim(),
         description: String(description).trim(),
         category: String(category).trim(),
@@ -504,6 +500,8 @@ app.post(
         calendarEventId: calendarEventId || undefined,
         calendarEventLink: calendarEventLink || undefined,
         room: resolvedRoom,
+        startTime: parsedStartTime,
+        endTime: parsedEndTime,
       },
     })
   },
@@ -540,22 +538,22 @@ app.put(
     }
 
     const {
-      title, description, category, startDate, endDate, ticketed, tbc,
+      title, description, category, startDate, startTime, endTime, ticketed, tbc,
       removePhoto, currentImageUrl, calendarEventId, calendarEventLink, room, previousRoom,
     } = req.body ?? {}
     const categoryInfo = category ? CATEGORY_MAP[String(category).trim().toLowerCase()] : undefined
     const parsedStartDate = typeof startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : null
     const resolvedRoom: Room = (ROOMS as readonly string[]).includes(room) ? room : DEFAULT_ROOM
     const priorRoom: Room = (ROOMS as readonly string[]).includes(previousRoom) ? previousRoom : resolvedRoom
+    const parsedStartTime = typeof startTime === 'string' && /^\d{2}:\d{2}$/.test(startTime) ? startTime : null
+    const parsedEndTime = typeof endTime === 'string' && /^\d{2}:\d{2}$/.test(endTime) ? endTime : null
 
-    if (!title || !description || !categoryInfo || !parsedStartDate) {
+    if (!title || !description || !categoryInfo || !parsedStartDate || !parsedStartTime || !parsedEndTime) {
       res.status(400).json({
-        error: 'title, description, a valid startDate (YYYY-MM-DD), and a recognized category are required.',
+        error: 'title, description, a valid date, start/end time, and a recognized category are required.',
       })
       return
     }
-    const parsedEndDate =
-      typeof endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : ''
 
     const file = (req as any).file as { buffer: Buffer; mimetype: string; originalname: string } | undefined
     let photoDirectUrl = typeof currentImageUrl === 'string' ? currentImageUrl.trim() : ''
@@ -578,7 +576,8 @@ app.put(
         categoryInfo.kicker,
         editorEmail,
         parsedStartDate,
-        parsedEndDate,
+        parsedStartTime,
+        parsedEndTime,
       )
       try {
         if (finalCalendarEventId && priorCalendarId && priorCalendarId !== targetCalendarId) {
@@ -612,13 +611,12 @@ app.put(
     try {
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `A${row}:M${row}`,
+        range: `A${row}:N${row}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[
             new Date().toISOString(),
             parsedStartDate,
-            parsedEndDate,
             String(title).trim(),
             String(description).trim(),
             String(category).trim(),
@@ -629,6 +627,8 @@ app.put(
             finalCalendarEventLink,
             uid,
             resolvedRoom,
+            parsedStartTime,
+            parsedEndTime,
           ]],
         },
       })
@@ -646,7 +646,6 @@ app.put(
         id: uid,
         row,
         startDate: parsedStartDate,
-        endDate: parsedEndDate || undefined,
         title: String(title).trim(),
         description: String(description).trim(),
         category: String(category).trim(),
@@ -658,6 +657,8 @@ app.put(
         calendarEventId: finalCalendarEventId || undefined,
         calendarEventLink: finalCalendarEventLink || undefined,
         room: resolvedRoom,
+        startTime: parsedStartTime,
+        endTime: parsedEndTime,
       },
     })
   },

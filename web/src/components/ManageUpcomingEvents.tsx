@@ -90,7 +90,7 @@ export function ManageUpcomingEvents({
               <div className="manage-event-row__info">
                 <p className="manage-event-row__date">
                   {ev.startDate}
-                  {ev.endDate ? ` – ${ev.endDate}` : ''}
+                  {ev.startTime && ev.endTime ? ` · ${ev.startTime}–${ev.endTime}` : ''}
                 </p>
                 <p className="manage-event-row__title">{ev.title}</p>
                 <p className="manage-event-row__date">{ev.room ?? 'MSV Function Room'}</p>

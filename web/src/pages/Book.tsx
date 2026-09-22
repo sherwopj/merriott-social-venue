@@ -1,16 +1,9 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiUrl } from '../lib/apiBase'
 import { EXEMPTION_LABELS, computeAmountBreakdown } from '../lib/bookingPricing'
-import { addMonths, daysInMonth, startOfMonth, toISODate } from '../lib/dateGrid'
+import { SlotAvailabilityCalendar } from '../components/SlotAvailabilityCalendar'
 import functionRoomHirePdf from '../assets/MSV_Function_Room_Hire_Policy_and_Form.pdf'
-
-type BusySlot = { start: string; end: string }
-
-type AvailabilityResponse = {
-  busy: BusySlot[]
-  calendarConfigured: boolean
-}
 
 type BookingConfirmation = {
   reference: string
@@ -75,24 +68,6 @@ function formatTime(t: string) {
   const suffix = hour >= 12 ? 'pm' : 'am'
   const display = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
   return `${display}:${m}${suffix}`
-}
-
-function getDayStatus(dayStr: string, busy: BusySlot[]) {
-  const dayStart = new Date(`${dayStr}T00:00:00`).getTime()
-  const splitPoint = dayStart + 18 * 60 * 60 * 1000 // 6pm local time
-  const dayEnd = dayStart + 24 * 60 * 60 * 1000
-
-  let isDayBusy = false
-  let isEveningBusy = false
-
-  for (const b of busy) {
-    const s = new Date(b.start).getTime()
-    const e = new Date(b.end).getTime()
-    if (s < splitPoint && e > dayStart) isDayBusy = true
-    if (s < dayEnd && e > splitPoint) isEveningBusy = true
-  }
-
-  return { isDayBusy, isEveningBusy }
 }
 
 /* ── Success Screen ── */
@@ -222,11 +197,7 @@ function BookingSuccess({ booking, onReset }: { booking: BookingConfirmation; on
 
 /* ── Main Page ── */
 export function Book() {
-  const [cursor, setCursor] = useState(() => startOfMonth(new Date()))
-  const [busy, setBusy] = useState<BusySlot[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [calendarConfigured, setCalendarConfigured] = useState(true)
+  const [calendarRefreshKey, setCalendarRefreshKey] = useState(0)
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; type: 'day' | 'evening' } | null>(null)
   const [slotMissing, setSlotMissing] = useState(false)
   const selectedSlotFieldRef = useRef<HTMLLabelElement>(null)
@@ -293,61 +264,11 @@ export function Book() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const range = useMemo(() => {
-    const start = startOfMonth(cursor)
-    const end = addMonths(start, 1)
-    return { start: toISODate(start), end: toISODate(end) }
-  }, [cursor])
-
   const amounts = useMemo(
     () => computeAmountBreakdown(exemption, barNeeded ? barOpenTime : ''),
     [exemption, barNeeded, barOpenTime],
   )
   const { feeExempt, barSurchargeHours, total: amountDue } = amounts
-
-  const loadAvailability = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const pathOrAbsolute = apiUrl('/api/calendar/availability')
-      const u = pathOrAbsolute.startsWith('http')
-        ? new URL(pathOrAbsolute)
-        : new URL(pathOrAbsolute, window.location.origin)
-      u.searchParams.set('start', range.start)
-      u.searchParams.set('end', range.end)
-      const res = await fetch(u.toString())
-      if (!res.ok) throw new Error(`Request failed (${res.status})`)
-      const data = (await res.json()) as AvailabilityResponse
-      setBusy(data.busy)
-      setCalendarConfigured(data.calendarConfigured)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load availability')
-      setBusy([])
-    } finally {
-      setLoading(false)
-    }
-  }, [range.start, range.end])
-
-  useEffect(() => {
-    void loadAvailability()
-  }, [loadAvailability])
-
-  const year = cursor.getFullYear()
-  const month = cursor.getMonth()
-  const firstDow = new Date(year, month, 1).getDay()
-  const totalDays = daysInMonth(year, month)
-  const todayStr = toISODate(new Date())
-
-  const cells = useMemo(() => {
-    const pad = (firstDow + 6) % 7
-    const list: ({ kind: 'empty' } | { kind: 'day'; day: number; iso: string })[] = []
-    for (let i = 0; i < pad; i++) list.push({ kind: 'empty' })
-    for (let d = 1; d <= totalDays; d++) {
-      const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-      list.push({ kind: 'day', day: d, iso })
-    }
-    return list
-  }, [firstDow, totalDays, year, month])
 
   function selectSlot(date: string, type: 'day' | 'evening', startT: string, endT: string) {
     setSelectedSlot({ date, type })
@@ -446,7 +367,7 @@ export function Book() {
     setDeclaration(false)
     setNotes('')
     setSelectedSlot(null)
-    void loadAvailability()
+    setCalendarRefreshKey((k) => k + 1)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -494,91 +415,9 @@ export function Book() {
           </a>
         </div>
 
-        {loading ? (
-          <div className="loader-container">
-            <div className="spinner" role="status" aria-label="Loading" />
-            <p className="muted">Checking availability calendar…</p>
-          </div>
-        ) : (
-          <>
-            {!calendarConfigured && (
-              <p className="notice">
-                Calendar integration is not configured on the server yet — all dates show as available.
-              </p>
-            )}
+        <SlotAvailabilityCalendar key={calendarRefreshKey} selectedSlot={selectedSlot} onSelectSlot={selectSlot} />
 
-            <div className="cal-legend">
-              <div className="cal-legend__item">
-                <span className="cal-legend__box cal-legend__box--available-day"></span> Day Available
-              </div>
-              <div className="cal-legend__item">
-                <span className="cal-legend__box cal-legend__box--available-eve"></span> Eve Available
-              </div>
-              <div className="cal-legend__item">
-                <span className="cal-legend__box cal-legend__box--busy"></span> Booked
-              </div>
-              <div className="cal-legend__item">
-                <span className="cal-legend__box cal-legend__box--selected"></span> Your Selection
-              </div>
-            </div>
-
-            <div className="book-calendar">
-              <div className="book-calendar__toolbar">
-                <button type="button" className="btn btn--ghost" onClick={() => setCursor(addMonths(cursor, -1))}>
-                  Previous
-                </button>
-                <h2 className="book-calendar__title">
-                  {cursor.toLocaleString('en-GB', { month: 'long', year: 'numeric' })}
-                </h2>
-                <button type="button" className="btn btn--ghost" onClick={() => setCursor(addMonths(cursor, 1))}>
-                  Next
-                </button>
-              </div>
-              {error && <p className="error-text">{error}</p>}
-              <div className="cal-grid" role="grid" aria-label="Select a date">
-                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
-                  <div key={d} className="cal-grid__head" role="columnheader">
-                    {d}
-                  </div>
-                ))}
-                {cells.map((c, i) => {
-                  if (c.kind === 'empty') return <div key={`e-${i}`} className="cal-grid__cell cal-grid__cell--empty" />
-                  const { isDayBusy, isEveningBusy } = getDayStatus(c.iso, busy)
-                  const isPast = c.iso <= todayStr
-
-                  const daySelected = selectedSlot?.date === c.iso && selectedSlot?.type === 'day'
-                  const eveSelected = selectedSlot?.date === c.iso && selectedSlot?.type === 'evening'
-
-                  return (
-                    <div key={c.iso} className="cal-grid__cell cal-grid__day-container">
-                      <span className="cal-grid__day-num">{c.day}</span>
-                      <div className="cal-grid__slots">
-                        <button
-                          type="button"
-                          className={`cal-slot cal-slot--day${isDayBusy ? ' cal-slot--busy' : ''}${daySelected ? ' cal-slot--selected' : ''}`}
-                          disabled={isDayBusy || isPast}
-                          onClick={() => selectSlot(c.iso!, 'day', '12:00', '18:00')}
-                          aria-label={`Book Day slot on ${c.iso}`}
-                        >
-                          Day
-                        </button>
-                        <button
-                          type="button"
-                          className={`cal-slot cal-slot--evening${isEveningBusy ? ' cal-slot--busy' : ''}${eveSelected ? ' cal-slot--selected' : ''}`}
-                          disabled={isEveningBusy || isPast}
-                          onClick={() => selectSlot(c.iso!, 'evening', '18:00', '22:00')}
-                          aria-label={`Book Evening slot on ${c.iso}`}
-                        >
-                          Eve
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            <form className="book-form" onSubmit={onSubmit}>
+        <form className="book-form" onSubmit={onSubmit}>
               {/* Honeypot field for anti-spam */}
               <div className="hp-field" aria-hidden="true">
                 <label htmlFor="middleName">Middle Name</label>
@@ -801,8 +640,6 @@ export function Book() {
               </p>
               {submitError && <p className="submit-message submit-message--error">{submitError}</p>}
             </form>
-          </>
-        )}
       </div>
     </section>
   )

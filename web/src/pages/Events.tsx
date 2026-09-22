@@ -10,17 +10,9 @@ type UpcomingEventsResponse = {
   events: UpcomingEvent[]
 }
 
-function formatLongDate(startDate: string, endDate?: string) {
+function formatLongDate(startDate: string) {
   const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric' }
-  const start = new Date(`${startDate}T00:00:00`)
-  const startLabel = start.toLocaleDateString('en-GB', options)
-
-  if (endDate) {
-    const end = new Date(`${endDate}T00:00:00`)
-    return `${start.getDate()}–${end.toLocaleDateString('en-GB', options)}`
-  }
-
-  return startLabel
+  return new Date(`${startDate}T00:00:00`).toLocaleDateString('en-GB', options)
 }
 
 export function Events() {
@@ -52,7 +44,7 @@ export function Events() {
     today.setHours(0, 0, 0, 0)
 
     return upcomingEvents
-      .filter((ev) => new Date(`${ev.endDate ?? ev.startDate}T23:59:59`) >= today)
+      .filter((ev) => new Date(`${ev.startDate}T23:59:59`) >= today)
       .sort((a, b) => a.startDate.localeCompare(b.startDate))
   }, [upcomingEvents])
 
@@ -97,7 +89,7 @@ export function Events() {
                     )}
                     <div className="upcoming-event__body">
                       <p className="upcoming-event__full-date">
-                        <time dateTime={ev.startDate}>{formatLongDate(ev.startDate, ev.endDate)}</time>
+                        <time dateTime={ev.startDate}>{formatLongDate(ev.startDate)}</time>
                       </p>
                       <h3 className="upcoming-event__title">{ev.title}</h3>
                       <p className="upcoming-event__description">{ev.description}</p>

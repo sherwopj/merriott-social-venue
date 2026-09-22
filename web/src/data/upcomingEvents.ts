@@ -9,8 +9,9 @@ import type { IconName } from '../components/EventIcon'
 export type UpcomingEvent = {
   id: string
   row?: number // sheet row number; present on live/API data, absent on the bundled fallback
-  startDate: string // 'YYYY-MM-DD'
-  endDate?: string // for multi-day entries
+  startDate: string // 'YYYY-MM-DD' — events are always single-day
+  startTime?: string
+  endTime?: string
   title: string
   description: string
   category?: string // raw category string, used to pre-fill an edit form's dropdown
@@ -26,10 +27,17 @@ export type UpcomingEvent = {
 
 export const upcomingEvents: UpcomingEvent[] = [
   {
-    id: 'volunteer-days-2026-10',
+    id: 'volunteer-day-2026-10-02',
     startDate: '2026-10-02',
-    endDate: '2026-10-03',
-    title: 'Volunteer Days',
+    title: 'Volunteer Day',
+    description: 'Help us get the venue ready. All volunteers welcome, no experience needed.',
+    kicker: 'Community',
+    icon: 'handsHeart',
+  },
+  {
+    id: 'volunteer-day-2026-10-03',
+    startDate: '2026-10-03',
+    title: 'Volunteer Day',
     description: 'Help us get the venue ready. All volunteers welcome, no experience needed.',
     kicker: 'Community',
     icon: 'handsHeart',

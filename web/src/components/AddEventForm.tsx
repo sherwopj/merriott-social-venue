@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
-import { EventAvailabilityCalendar } from './EventAvailabilityCalendar'
+import { SlotAvailabilityCalendar } from './SlotAvailabilityCalendar'
 import type { UpcomingEvent } from '../data/upcomingEvents'
 
 const CATEGORY_OPTIONS = [
@@ -41,7 +41,8 @@ export function AddEventForm({
   const [category, setCategory] = useState(() => resolveInitialCategory(existingEvent))
   const [room, setRoom] = useState<(typeof ROOM_OPTIONS)[number]>(existingEvent?.room ?? 'MSV Function Room')
   const [startDate, setStartDate] = useState(existingEvent?.startDate ?? '')
-  const [endDate, setEndDate] = useState(existingEvent?.endDate ?? '')
+  const [startTime, setStartTime] = useState(existingEvent?.startTime ?? '18:00')
+  const [endTime, setEndTime] = useState(existingEvent?.endTime ?? '22:00')
   const [ticketed, setTicketed] = useState(existingEvent?.ticketed ?? false)
   const [tbc, setTbc] = useState(existingEvent?.tbc ?? false)
   const [photo, setPhoto] = useState<File | null>(null)
@@ -67,7 +68,8 @@ export function AddEventForm({
       formData.append('category', category)
       formData.append('room', room)
       formData.append('startDate', startDate)
-      if (endDate) formData.append('endDate', endDate)
+      formData.append('startTime', startTime)
+      formData.append('endTime', endTime)
       formData.append('ticketed', ticketed ? 'yes' : 'no')
       formData.append('tbc', tbc ? 'yes' : 'no')
       if (photo) formData.append('photo', photo)
@@ -110,7 +112,8 @@ export function AddEventForm({
         setCategory(CATEGORY_OPTIONS[0])
         setRoom('MSV Function Room')
         setStartDate('')
-        setEndDate('')
+        setStartTime('18:00')
+        setEndTime('22:00')
         setTicketed(false)
         setTbc(false)
       } else {
@@ -141,8 +144,16 @@ export function AddEventForm({
       </label>
 
       <div className="field">
-        <span>Check availability &amp; pick a date</span>
-        <EventAvailabilityCalendar room={room} selectedDate={startDate} onSelectDate={setStartDate} />
+        <span>Check availability &amp; pick a date/slot</span>
+        <SlotAvailabilityCalendar
+          room={room}
+          selectedSlot={startDate ? { date: startDate, type: startTime === '12:00' ? 'day' : 'evening' } : null}
+          onSelectSlot={(date, _type, startT, endT) => {
+            setStartDate(date)
+            setStartTime(startT)
+            setEndTime(endT)
+          }}
+        />
       </div>
 
       <div className="field-row">
@@ -151,8 +162,12 @@ export function AddEventForm({
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
         </label>
         <label className="field">
-          <span>End date (optional)</span>
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <span>Start time</span>
+          <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+        </label>
+        <label className="field">
+          <span>End time</span>
+          <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
         </label>
       </div>
 

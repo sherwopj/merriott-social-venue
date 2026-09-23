@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
 import type { UpcomingEvent } from '../data/upcomingEvents'
 import { AddEventForm } from './AddEventForm'
@@ -77,8 +77,6 @@ export function ManageUpcomingEvents({
   if (!sheetConfigured) return <p className="notice">Events sheet isn't configured on the server yet.</p>
   if (!events) return <p className="field-hint">Loading…</p>
 
-  const editingEvent = events.find((ev) => ev.id === editingId) ?? null
-
   return (
     <div>
       {deleteError && <p className="submit-message submit-message--error">{deleteError}</p>}
@@ -88,68 +86,75 @@ export function ManageUpcomingEvents({
       ) : (
         <ul className="manage-events-list">
           {events.map((ev) => (
-            <li key={ev.id} className="manage-event-row">
-              {ev.image ? (
-                <img src={ev.image} alt="" className="manage-event-row__thumb" />
-              ) : (
-                <div className="manage-event-row__thumb manage-event-row__thumb--icon">
-                  <EventIcon name={ev.icon} />
-                </div>
-              )}
-              <div className="manage-event-row__info">
-                <p className="manage-event-row__date">
-                  {ev.startDate}
-                  {ev.startTime && ev.endTime ? ` · ${ev.startTime}–${ev.endTime}` : ''}
-                </p>
-                <p className="manage-event-row__title">{ev.title}</p>
-                <p className="manage-event-row__date">{ev.room ?? 'MSV Function Room'}</p>
-                {(ev.addedBy || ev.lastUpdatedBy) && (
+            <Fragment key={ev.id}>
+              <li className="manage-event-row">
+                {ev.image ? (
+                  <img src={ev.image} alt="" className="manage-event-row__thumb" />
+                ) : (
+                  <div className="manage-event-row__thumb manage-event-row__thumb--icon">
+                    <EventIcon name={ev.icon} />
+                  </div>
+                )}
+                <div className="manage-event-row__info">
                   <p className="manage-event-row__date">
-                    {ev.addedBy && `Added by ${ev.addedBy}`}
-                    {ev.addedBy && ev.lastUpdatedBy ? ' · ' : ''}
-                    {ev.lastUpdatedBy && `Last updated by ${ev.lastUpdatedBy}`}
+                    {ev.startDate}
+                    {ev.startTime && ev.endTime ? ` · ${ev.startTime}–${ev.endTime}` : ''}
                   </p>
-                )}
-                {ev.calendarEventLink && (
-                  <a href={ev.calendarEventLink} target="_blank" rel="noopener noreferrer" className="manage-event-row__cal-link">
-                    View in Calendar ↗
-                  </a>
-                )}
-              </div>
-              <div className="manage-event-row__actions">
-                <button type="button" className="btn btn--ghost" onClick={() => setEditingId(ev.id)}>
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  disabled={deletingId === ev.id}
-                  onClick={() => handleDelete(ev)}
-                >
-                  {deletingId === ev.id ? 'Deleting…' : 'Delete'}
-                </button>
-              </div>
-            </li>
+                  <p className="manage-event-row__title">{ev.title}</p>
+                  <p className="manage-event-row__date">{ev.room ?? 'MSV Function Room'}</p>
+                  {(ev.addedBy || ev.lastUpdatedBy) && (
+                    <p className="manage-event-row__date">
+                      {ev.addedBy && `Added by ${ev.addedBy}`}
+                      {ev.addedBy && ev.lastUpdatedBy ? ' · ' : ''}
+                      {ev.lastUpdatedBy && `Last updated by ${ev.lastUpdatedBy}`}
+                    </p>
+                  )}
+                  {ev.calendarEventLink && (
+                    <a href={ev.calendarEventLink} target="_blank" rel="noopener noreferrer" className="manage-event-row__cal-link">
+                      View in Calendar ↗
+                    </a>
+                  )}
+                </div>
+                <div className="manage-event-row__actions">
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => setEditingId(editingId === ev.id ? null : ev.id)}
+                  >
+                    {editingId === ev.id ? 'Close' : 'Edit'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    disabled={deletingId === ev.id}
+                    onClick={() => handleDelete(ev)}
+                  >
+                    {deletingId === ev.id ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
+              </li>
+              {editingId === ev.id && (
+                <li className="manage-event-edit-panel">
+                  <div className="admin-tool">
+                    <h3 className="section-title section-title--small">Edit event</h3>
+                    <AddEventForm
+                      credential={credential}
+                      existingEvent={ev}
+                      onSaved={() => {
+                        setEditingId(null)
+                        void load()
+                      }}
+                      onCredentialInvalid={onCredentialInvalid}
+                    />
+                    <button type="button" className="link-btn" onClick={() => setEditingId(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                </li>
+              )}
+            </Fragment>
           ))}
         </ul>
-      )}
-
-      {editingEvent && (
-        <div className="admin-tool">
-          <h3 className="section-title section-title--small">Edit event</h3>
-          <AddEventForm
-            credential={credential}
-            existingEvent={editingEvent}
-            onSaved={() => {
-              setEditingId(null)
-              void load()
-            }}
-            onCredentialInvalid={onCredentialInvalid}
-          />
-          <button type="button" className="link-btn" onClick={() => setEditingId(null)}>
-            Cancel
-          </button>
-        </div>
       )}
     </div>
   )

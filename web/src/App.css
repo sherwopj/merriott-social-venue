@@ -566,6 +566,19 @@
   color: var(--color-accent);
 }
 
+@media (max-width: 600px) {
+  .manage-event-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .manage-event-row__actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: 0.5rem;
+  }
+}
+
 .events-week {
   list-style: none;
   margin: 0;

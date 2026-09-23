@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
+import { SessionExpiredError, adminFetch } from '../lib/adminApi'
 import { EXEMPTION_LABELS, computeAmountBreakdown } from '../lib/bookingPricing'
 import { SlotAvailabilityCalendar } from './SlotAvailabilityCalendar'
 import { InfoTip } from './InfoTip'
@@ -76,21 +77,14 @@ export function BookingAdminForm({
         body.paid = paid
       }
 
-      const res = await fetch(url, {
+      await adminFetch(url, {
         method: isEditing ? 'PUT' : 'POST',
         headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          onCredentialInvalid()
-          return
-        }
-        const data = await res.json().catch(() => null)
-        throw new Error(data?.error || `Request failed (${res.status})`)
-      }
+      }, onCredentialInvalid)
       onSaved()
     } catch (err) {
+      if (err instanceof SessionExpiredError) return
       setError(err instanceof Error ? err.message : 'Could not save the booking')
     } finally {
       setSubmitting(false)

@@ -1,6 +1,6 @@
 export const EXEMPTION_LABELS: Record<string, string> = {
   none: 'None – Regular Hire (£25)',
-  adult_evening: 'Adult evening event (30+ bar users)',
+  large_evening: 'Large evening event (15+ adults, bar open)',
   funeral: 'Funeral / Wake',
   charity: 'Charity Event',
 }

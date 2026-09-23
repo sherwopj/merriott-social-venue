@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
+import { SessionExpiredError, adminFetch } from '../lib/adminApi'
 import type { UpcomingEvent } from '../data/upcomingEvents'
 import { AddEventForm } from './AddEventForm'
 import { EventIcon } from './EventIcon'
@@ -46,7 +47,7 @@ export function ManageUpcomingEvents({
     setDeletingId(ev.id)
     setDeleteError(null)
     try {
-      const res = await fetch(apiUrl(`/api/upcoming-events/${ev.id}`), {
+      await adminFetch(apiUrl(`/api/upcoming-events/${ev.id}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -56,17 +57,10 @@ export function ManageUpcomingEvents({
           title: ev.title,
           startDate: ev.startDate,
         }),
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          onCredentialInvalid()
-          return
-        }
-        const data = await res.json().catch(() => null)
-        throw new Error(data?.error || `Request failed (${res.status})`)
-      }
+      }, onCredentialInvalid)
       await load()
     } catch (err) {
+      if (err instanceof SessionExpiredError) return
       setDeleteError(err instanceof Error ? err.message : 'Could not delete the event')
     } finally {
       setDeletingId(null)

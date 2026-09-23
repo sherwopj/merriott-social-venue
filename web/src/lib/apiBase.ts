@@ -1,4 +1,4 @@
-export function getApiBase(): string {
+function getApiBase(): string {
   const env = import.meta.env.VITE_API_URL
   if (env && env.length > 0) return env.replace(/\/$/, '')
   return 'https://api.merriottsocialvenue.co.uk'

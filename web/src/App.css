@@ -271,16 +271,6 @@
   margin: 0 0 1rem;
 }
 
-.hero-banner__fallback-hint {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-.hero-banner__fallback-hint code {
-  color: var(--color-accent);
-}
-
 .container {
   max-width: 1100px;
   margin: 0 auto;
@@ -347,27 +337,6 @@
 .prose p {
   margin: 0 0 1rem;
   color: var(--color-text-muted);
-}
-
-.gallery-grid {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 1rem;
-}
-
-.gallery-grid li {
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid rgba(215, 161, 69, 0.2);
-}
-
-.gallery-grid img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
 }
 
 .muted {
@@ -1252,36 +1221,6 @@ code {
 }
 
 
-
-/* Lightbox styles */
-.lightbox-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0,0,0,0.85);
-  z-index: 80;
-}
-
-.lightbox-image {
-  max-width: 95vw;
-  max-height: 95vh;
-  border-radius: 8px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-}
-
-.lightbox-close {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: transparent;
-  color: #fff;
-  border: none;
-  font-size: 24px;
-  z-index: 90;
-  cursor: pointer;
-}
 /* Honeypot anti-spam field */
 .hp-field {
   position: absolute;

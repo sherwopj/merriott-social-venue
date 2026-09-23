@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
+import { SessionExpiredError, adminFetch } from '../lib/adminApi'
 import { SlotAvailabilityCalendar } from './SlotAvailabilityCalendar'
 import type { UpcomingEvent } from '../data/upcomingEvents'
 
@@ -87,20 +88,12 @@ export function AddEventForm({
         formData.append('removePhoto', removePhoto ? 'yes' : 'no')
       }
 
-      const res = await fetch(url, {
+      const res = await adminFetch(url, {
         method,
         headers: { Authorization: `Bearer ${credential}` },
         body: formData,
-      })
-
-      const data = await res.json().catch(() => null)
-      if (!res.ok) {
-        if (res.status === 401) {
-          onCredentialInvalid()
-          return
-        }
-        throw new Error(data?.error || `Request failed (${res.status})`)
-      }
+      }, onCredentialInvalid)
+      const data = await res.json()
 
       onSaved(data.event as UpcomingEvent)
       setSuccessMessage(
@@ -123,6 +116,7 @@ export function AddEventForm({
       setPhoto(null)
       setPhotoInputKey((k) => k + 1)
     } catch (err) {
+      if (err instanceof SessionExpiredError) return
       setSubmitError(err instanceof Error ? err.message : 'Could not save the event')
     } finally {
       setSubmitting(false)

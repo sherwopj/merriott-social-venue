@@ -97,6 +97,39 @@ async function verifyEditorEmail(authorizationHeader: string | undefined): Promi
   }
 }
 
+// Shared by every admin route: verifies the request's editor identity, writing the 401
+// response itself and returning null when it isn't authorized — callers just do
+// `if (!editorEmail) return`.
+async function requireEditor(req: express.Request, res: express.Response, message: string): Promise<string | null> {
+  const editorEmail = await verifyEditorEmail(req.headers.authorization)
+  if (!editorEmail) {
+    res.status(401).json({ error: message })
+    return null
+  }
+  return editorEmail
+}
+
+function requireBookingsSheet(res: express.Response): boolean {
+  if (sheets && bookingsSheetConfigured) return true
+  res.status(503).json({ error: 'Bookings sheet is not configured on the server.' })
+  return false
+}
+
+function requireEventsSheet(res: express.Response): boolean {
+  if (sheets && sheetConfigured) return true
+  res.status(503).json({ error: 'Events sheet is not configured on the server.' })
+  return false
+}
+
+async function requireBooking(reference: string, res: express.Response): Promise<{ row: number; booking: BookingRecord } | null> {
+  const found = await getBookingByReference(reference)
+  if (!found) {
+    res.status(404).json({ error: 'Booking not found — it may already have been cancelled elsewhere.' })
+    return null
+  }
+  return found
+}
+
 const photoUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
@@ -459,16 +492,10 @@ app.post(
     })
   },
   async (req, res) => {
-    const editorEmail = await verifyEditorEmail(req.headers.authorization)
-    if (!editorEmail) {
-      res.status(401).json({ error: 'Sign-in required or not authorized to add events.' })
-      return
-    }
+    const editorEmail = await requireEditor(req, res, 'Sign-in required or not authorized to add events.')
+    if (!editorEmail) return
 
-    if (!sheets || !sheetConfigured) {
-      res.status(503).json({ error: 'Events sheet is not configured on the server.' })
-      return
-    }
+    if (!requireEventsSheet(res)) return
 
     const { title, description, category, startDate, startTime, endTime, ticketed, tbc, room } = req.body ?? {}
     const categoryInfo = category ? CATEGORY_MAP[String(category).trim().toLowerCase()] : undefined
@@ -598,16 +625,10 @@ app.put(
     })
   },
   async (req, res) => {
-    const editorEmail = await verifyEditorEmail(req.headers.authorization)
-    if (!editorEmail) {
-      res.status(401).json({ error: 'Sign-in required or not authorized to add events.' })
-      return
-    }
+    const editorEmail = await requireEditor(req, res, 'Sign-in required or not authorized to add events.')
+    if (!editorEmail) return
 
-    if (!sheets || !sheetConfigured) {
-      res.status(503).json({ error: 'Events sheet is not configured on the server.' })
-      return
-    }
+    if (!requireEventsSheet(res)) return
 
     const uid = req.params.id
     const row = await findRowByUid(uid)
@@ -748,16 +769,10 @@ app.put(
 )
 
 app.delete('/api/upcoming-events/:id', async (req, res) => {
-  const editorEmail = await verifyEditorEmail(req.headers.authorization)
-  if (!editorEmail) {
-    res.status(401).json({ error: 'Sign-in required or not authorized to add events.' })
-    return
-  }
+  const editorEmail = await requireEditor(req, res, 'Sign-in required or not authorized to add events.')
+  if (!editorEmail) return
 
-  if (!sheets || !sheetConfigured) {
-    res.status(503).json({ error: 'Events sheet is not configured on the server.' })
-    return
-  }
+  if (!requireEventsSheet(res)) return
 
   const row = await findRowByUid(req.params.id)
   if (row === null) {
@@ -1543,11 +1558,8 @@ function isoDateDaysAgo(days: number): string {
 }
 
 app.get('/api/admin/bookings', async (req, res) => {
-  const editorEmail = await verifyEditorEmail(req.headers.authorization)
-  if (!editorEmail) {
-    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
-    return
-  }
+  const editorEmail = await requireEditor(req, res, 'Sign-in required or not authorized to manage bookings.')
+  if (!editorEmail) return
   if (!sheets || !bookingsSheetConfigured) {
     res.json({ sheetConfigured: false, bookings: [] })
     return
@@ -1567,11 +1579,8 @@ app.get('/api/admin/bookings', async (req, res) => {
 })
 
 app.post('/api/admin/bookings', async (req, res) => {
-  const editorEmail = await verifyEditorEmail(req.headers.authorization)
-  if (!editorEmail) {
-    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
-    return
-  }
+  const editorEmail = await requireEditor(req, res, 'Sign-in required or not authorized to manage bookings.')
+  if (!editorEmail) return
 
   const {
     name, email, phone, address, date, startTime, endTime, eventType, attendees,
@@ -1606,15 +1615,9 @@ app.post('/api/admin/bookings', async (req, res) => {
 })
 
 app.put('/api/admin/bookings/:reference', async (req, res) => {
-  const editorEmail = await verifyEditorEmail(req.headers.authorization)
-  if (!editorEmail) {
-    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
-    return
-  }
-  if (!sheets || !bookingsSheetConfigured) {
-    res.status(503).json({ error: 'Bookings sheet is not configured on the server.' })
-    return
-  }
+  const editorEmail = await requireEditor(req, res, 'Sign-in required or not authorized to manage bookings.')
+  if (!editorEmail) return
+  if (!requireBookingsSheet(res)) return
 
   // Exemption and bar-opening times determine the price, so editing is refused if any are
   // present — the UI never sends them, but the server enforces it independently too.
@@ -1626,11 +1629,8 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
   }
 
   const reference = req.params.reference
-  const found = await getBookingByReference(reference)
-  if (!found) {
-    res.status(404).json({ error: 'Booking not found — it may already have been cancelled elsewhere.' })
-    return
-  }
+  const found = await requireBooking(reference, res)
+  if (!found) return
   const { row, booking: existing } = found
 
   const { name, email, phone, address, date, startTime, endTime, eventType, attendees, notes, confirmed } = req.body ?? {}
@@ -1728,22 +1728,13 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
 })
 
 app.post('/api/admin/bookings/:reference/confirm', async (req, res) => {
-  const editorEmail = await verifyEditorEmail(req.headers.authorization)
-  if (!editorEmail) {
-    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
-    return
-  }
-  if (!sheets || !bookingsSheetConfigured) {
-    res.status(503).json({ error: 'Bookings sheet is not configured on the server.' })
-    return
-  }
+  const editorEmail = await requireEditor(req, res, 'Sign-in required or not authorized to manage bookings.')
+  if (!editorEmail) return
+  if (!requireBookingsSheet(res)) return
 
   const reference = req.params.reference
-  const found = await getBookingByReference(reference)
-  if (!found) {
-    res.status(404).json({ error: 'Booking not found — it may already have been cancelled elsewhere.' })
-    return
-  }
+  const found = await requireBooking(reference, res)
+  if (!found) return
   const { row, booking: existing } = found
 
   if (existing.status === 'cancelled') {
@@ -1792,22 +1783,13 @@ app.post('/api/admin/bookings/:reference/confirm', async (req, res) => {
 })
 
 app.delete('/api/admin/bookings/:reference', async (req, res) => {
-  const editorEmail = await verifyEditorEmail(req.headers.authorization)
-  if (!editorEmail) {
-    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
-    return
-  }
-  if (!sheets || !bookingsSheetConfigured) {
-    res.status(503).json({ error: 'Bookings sheet is not configured on the server.' })
-    return
-  }
+  const editorEmail = await requireEditor(req, res, 'Sign-in required or not authorized to manage bookings.')
+  if (!editorEmail) return
+  if (!requireBookingsSheet(res)) return
 
   const reference = req.params.reference
-  const found = await getBookingByReference(reference)
-  if (!found) {
-    res.status(404).json({ error: 'Booking not found — it may already have been cancelled elsewhere.' })
-    return
-  }
+  const found = await requireBooking(reference, res)
+  if (!found) return
   const { row, booking: existing } = found
 
   // Best-effort: delete the Calendar event, but a failure here shouldn't block the
@@ -1878,22 +1860,13 @@ app.delete('/api/admin/bookings/:reference', async (req, res) => {
 // been refunded — for bookkeeping only. The actual refund is always issued manually in the
 // Stripe Dashboard (linked via paymentDashboardUrl); this endpoint never talks to Stripe.
 app.put('/api/admin/bookings/:reference/refund', async (req, res) => {
-  const editorEmail = await verifyEditorEmail(req.headers.authorization)
-  if (!editorEmail) {
-    res.status(401).json({ error: 'Sign-in required or not authorized to manage bookings.' })
-    return
-  }
-  if (!sheets || !bookingsSheetConfigured) {
-    res.status(503).json({ error: 'Bookings sheet is not configured on the server.' })
-    return
-  }
+  const editorEmail = await requireEditor(req, res, 'Sign-in required or not authorized to manage bookings.')
+  if (!editorEmail) return
+  if (!requireBookingsSheet(res)) return
 
   const reference = req.params.reference
-  const found = await getBookingByReference(reference)
-  if (!found) {
-    res.status(404).json({ error: 'Booking not found — it may already have been cancelled elsewhere.' })
-    return
-  }
+  const found = await requireBooking(reference, res)
+  if (!found) return
   const { row, booking: existing } = found
 
   if (existing.paymentMethod !== 'online' || !existing.paymentIntentId) {

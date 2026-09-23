@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { apiUrl } from '../lib/apiBase'
+import { SessionExpiredError, adminFetch } from '../lib/adminApi'
 import { EXEMPTION_LABELS } from '../lib/bookingPricing'
 import { formatPounds } from '../pages/admin/AdminBookings'
 import type { Booking, BookingStatus } from '../pages/admin/AdminBookings'
@@ -41,7 +42,7 @@ export function BookingViewModal({
     setError(null)
     setSaved(false)
     try {
-      const res = await fetch(apiUrl(`/api/admin/bookings/${booking.reference}/refund`), {
+      const res = await adminFetch(apiUrl(`/api/admin/bookings/${booking.reference}/refund`), {
         method: 'PUT',
         headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -49,19 +50,12 @@ export function BookingViewModal({
           depositRefundedAmount: Math.round(parseFloat(depositRefunded || '0') * 100),
           barSurchargeRefundedAmount: Math.round(parseFloat(barRefunded || '0') * 100),
         }),
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          onCredentialInvalid()
-          return
-        }
-        const data = await res.json().catch(() => null)
-        throw new Error(data?.error || `Request failed (${res.status})`)
-      }
+      }, onCredentialInvalid)
       const data = await res.json()
       onRefundSaved(data.booking)
       setSaved(true)
     } catch (err) {
+      if (err instanceof SessionExpiredError) return
       setError(err instanceof Error ? err.message : 'Could not save the refund record')
     } finally {
       setSaving(false)

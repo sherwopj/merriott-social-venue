@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { apiUrl } from '../../lib/apiBase'
+import { SessionExpiredError, adminFetch } from '../../lib/adminApi'
 import { EXEMPTION_LABELS } from '../../lib/bookingPricing'
 import { BookingAdminForm } from '../../components/BookingAdminForm'
 import { BookingViewModal } from '../../components/BookingViewModal'
@@ -101,20 +102,13 @@ export function AdminBookings() {
     setActioningReference(booking.reference)
     setActionError(null)
     try {
-      const res = await fetch(apiUrl(`/api/admin/bookings/${booking.reference}/confirm`), {
+      await adminFetch(apiUrl(`/api/admin/bookings/${booking.reference}/confirm`), {
         method: 'POST',
         headers: { Authorization: `Bearer ${credential}` },
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          onCredentialInvalid()
-          return
-        }
-        const data = await res.json().catch(() => null)
-        throw new Error(data?.error || `Request failed (${res.status})`)
-      }
+      }, onCredentialInvalid)
       await load()
     } catch (err) {
+      if (err instanceof SessionExpiredError) return
       setActionError(err instanceof Error ? err.message : 'Could not confirm the booking')
     } finally {
       setActioningReference(null)
@@ -128,20 +122,13 @@ export function AdminBookings() {
     setActioningReference(booking.reference)
     setActionError(null)
     try {
-      const res = await fetch(apiUrl(`/api/admin/bookings/${booking.reference}`), {
+      await adminFetch(apiUrl(`/api/admin/bookings/${booking.reference}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${credential}` },
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          onCredentialInvalid()
-          return
-        }
-        const data = await res.json().catch(() => null)
-        throw new Error(data?.error || `Request failed (${res.status})`)
-      }
+      }, onCredentialInvalid)
       await load()
     } catch (err) {
+      if (err instanceof SessionExpiredError) return
       setActionError(err instanceof Error ? err.message : 'Could not cancel the booking')
     } finally {
       setActioningReference(null)

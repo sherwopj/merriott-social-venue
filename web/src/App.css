@@ -397,6 +397,12 @@
   margin-bottom: 0;
 }
 
+.events-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
 .events-columns {
   display: flex;
   flex-direction: column;
@@ -407,7 +413,17 @@
   min-width: 0;
 }
 
+@media (max-width: 999.98px) {
+  .events-column--hidden-mobile {
+    display: none;
+  }
+}
+
 @media (min-width: 1000px) {
+  .events-tabs {
+    display: none;
+  }
+
   .events-columns {
     flex-direction: row;
     align-items: flex-start;

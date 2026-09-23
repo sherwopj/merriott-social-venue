@@ -16,6 +16,7 @@ function formatLongDate(startDate: string) {
 
 export function Events() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'weekly'>('upcoming')
   // Show the bundled list immediately; silently upgrade to the live Google Sheet data
   // (fed by committee members via a Form) if/when it's reachable. If it isn't — API
   // asleep, sheet not set up yet, network hiccup — this bundled list stays on screen.
@@ -50,14 +51,29 @@ export function Events() {
   return (
     <section className="section">
       <div className="container container--wide">
-        <h1 className="page-title">Events</h1>
-        <p className="lede">
-          Regular weekly happenings plus our upcoming calendar of discos, live music and special
-          nights. Times can vary — check at the bar or on our notices for the latest.
-        </p>
+        <h1 className="page-title">What's On</h1>
+
+        <div className="events-tabs">
+          <button
+            type="button"
+            className={`btn ${activeTab === 'upcoming' ? 'btn--primary' : 'btn--ghost'}`}
+            onClick={() => setActiveTab('upcoming')}
+          >
+            Upcoming
+          </button>
+          <button
+            type="button"
+            className={`btn ${activeTab === 'weekly' ? 'btn--primary' : 'btn--ghost'}`}
+            onClick={() => setActiveTab('weekly')}
+          >
+            Weekly
+          </button>
+        </div>
 
         <div className="events-columns">
-          <div className="events-column events-column--upcoming">
+          <div
+            className={`events-column events-column--upcoming${activeTab !== 'upcoming' ? ' events-column--hidden-mobile' : ''}`}
+          >
             <div className="events-column__heading">
               <h2 className="section-title">Upcoming events</h2>
             </div>
@@ -101,7 +117,9 @@ export function Events() {
             </ul>
           </div>
 
-          <div className="events-column events-column--weekly">
+          <div
+            className={`events-column events-column--weekly${activeTab !== 'weekly' ? ' events-column--hidden-mobile' : ''}`}
+          >
             <h2 className="section-title">This week, every week</h2>
             <ul className="events-week">
               {weekdayOrder.map((day) => {

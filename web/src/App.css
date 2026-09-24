@@ -582,7 +582,6 @@
   padding-bottom: 0.35rem;
 }
 
-.events-card,
 .upcoming-event {
   display: grid;
   grid-template-columns: minmax(0, 200px) 1fr;
@@ -595,13 +594,11 @@
 }
 
 @media (max-width: 600px) {
-  .events-card,
   .upcoming-event {
     grid-template-columns: 1fr;
   }
 }
 
-.events-card__media,
 .upcoming-event__media {
   position: relative;
   aspect-ratio: 1 / 1;
@@ -612,7 +609,6 @@
   background: var(--color-bg);
 }
 
-.events-card__media img,
 .upcoming-event__media img {
   width: 100%;
   height: 100%;
@@ -626,37 +622,18 @@
   color: var(--color-accent);
 }
 
-.events-card__body,
 .upcoming-event__body {
   padding: 1rem 1.25rem 1.25rem 0;
 }
 
 @media (max-width: 600px) {
-  .events-card__body,
   .upcoming-event__body {
     padding: 0 1rem 1rem;
   }
 }
 
-.events-card__body h3 {
-  margin: 0 0 0.5rem;
-  font-size: 1.15rem;
-}
-
-.events-card__body p {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.95rem;
-}
-
 .events-day__empty {
   margin: 0;
-}
-
-.events-day__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
 }
 
 .events-card__note {
@@ -666,8 +643,7 @@
   font-style: italic;
 }
 
-.events-card__media-btn,
-.events-card__title-btn {
+.events-card__media-btn {
   background: none;
   border: none;
   padding: 0;
@@ -695,10 +671,6 @@
 
 .events-card__media-btn:hover .events-card__zoom-hint {
   opacity: 1;
-}
-
-.events-card__title-btn:hover h3 {
-  color: var(--color-accent);
 }
 
 /* Lightbox */

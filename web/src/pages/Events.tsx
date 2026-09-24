@@ -128,36 +128,31 @@ export function Events() {
                   <li key={day} className="events-day">
                     <h3 className="events-day__label">{weekdayLabels[day]}</h3>
                     {events && events.length > 0 ? (
-                      <div className="events-day__grid">
+                      <ul className="upcoming-events">
                         {events.map((ev, idx) => (
-                          <article key={`${day}-${idx}`} className="events-card">
+                          <li key={`${day}-${idx}`} className="upcoming-event">
                             <button
                               className="events-card__media-btn"
                               onClick={() => setSelectedImage(ev.image)}
                               aria-label={`View full size image for ${ev.title}`}
                             >
-                              <div className="events-card__media">
+                              <div className="upcoming-event__media">
                                 <img src={ev.image} alt={ev.title} loading="lazy" decoding="async" />
                                 <div className="events-card__zoom-hint">Click to enlarge</div>
                               </div>
                             </button>
-                            <div className="events-card__body">
-                              <button
-                                className="events-card__title-btn"
-                                onClick={() => setSelectedImage(ev.image)}
-                              >
-                                <h4>{ev.title}</h4>
-                              </button>
-                              <p>{ev.description}</p>
+                            <div className="upcoming-event__body">
+                              <h3 className="upcoming-event__title">{ev.title}</h3>
+                              <p className="upcoming-event__description">{ev.description}</p>
                               {ev.note && (
                                 <p className="events-card__note">
                                   <strong>Note:</strong> {ev.note}
                                 </p>
                               )}
                             </div>
-                          </article>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     ) : (
                       <p className="muted events-day__empty">No regular event — see notices for specials.</p>
                     )}

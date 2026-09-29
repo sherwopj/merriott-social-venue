@@ -10,6 +10,7 @@ import { Home } from './pages/Home'
 import { Join } from './pages/Join'
 import { Team } from './pages/Team'
 import { Constitution } from './pages/Constitution'
+import { Privacy } from './pages/Privacy'
 import { ScrollToTop } from './components/ScrollToTop'
 import './App.css'
 
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="team" element={<Team />} />
           <Route path="join" element={<Join />} />
           <Route path="constitution" element={<Constitution />} />
+          <Route path="privacy" element={<Privacy />} />
           <Route path="book" element={<Book />} />
           <Route path="admin" element={<AdminLayout />}>
             <Route index element={<Navigate to="events" replace />} />

@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   isActive ? 'nav-link nav-link--active' : 'nav-link'
@@ -59,7 +59,7 @@ export function Layout() {
           >
             Merriott Social Venue
           </span>{' '}
-          · Merriott, Somerset, UK
+          · Merriott, Somerset, UK · <Link to="/privacy">Privacy Policy</Link>
         </p>
       </footer>
 

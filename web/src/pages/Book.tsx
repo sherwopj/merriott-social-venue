@@ -5,6 +5,37 @@ import { EXEMPTION_LABELS, computeAmountBreakdown } from '../lib/bookingPricing'
 import { SlotAvailabilityCalendar } from '../components/SlotAvailabilityCalendar'
 import { InfoTip } from '../components/InfoTip'
 import functionRoomHirePdf from '../assets/MSV_Function_Room_Hire_Policy_and_Form.pdf'
+import functionRoomImage1 from '../assets/function-room/function-room-1.png'
+import functionRoomImage2 from '../assets/function-room/function-room-2.png'
+import functionRoomImage3 from '../assets/function-room/function-room-3.png'
+import functionRoomImage4 from '../assets/function-room/function-room-4.png'
+
+const FUNCTION_ROOM_IMAGES = [functionRoomImage1, functionRoomImage2, functionRoomImage3, functionRoomImage4]
+
+function FunctionRoomCarousel() {
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setIndex((i) => (i + 1) % FUNCTION_ROOM_IMAGES.length)
+    }, 4000)
+    return () => clearInterval(id)
+  }, [])
+
+  return (
+    <div className="function-room-carousel">
+      {FUNCTION_ROOM_IMAGES.map((src, i) => (
+        <img
+          key={src}
+          src={src}
+          alt="The Merriott Social Venue function room set up for an event"
+          className={`function-room-carousel__img${i === index ? ' function-room-carousel__img--active' : ''}`}
+          loading={i === 0 ? 'eager' : 'lazy'}
+        />
+      ))}
+    </div>
+  )
+}
 
 type BookingConfirmation = {
   reference: string
@@ -389,6 +420,7 @@ export function Book() {
   return (
     <section className="section">
       <div className="container container--narrow">
+        <FunctionRoomCarousel />
         <h1 className="page-title">Book the function room</h1>
         <p className="lede">
           Choose a date for a <strong>provisional</strong> hold. Our team will contact you to confirm

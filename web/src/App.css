@@ -322,6 +322,30 @@
   color: var(--color-text);
 }
 
+.function-room-carousel {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  background: var(--color-bg-elevated);
+}
+
+.function-room-carousel__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 1s ease;
+}
+
+.function-room-carousel__img--active {
+  opacity: 1;
+}
+
 .lede {
   font-size: 1.05rem;
   color: var(--color-text-muted);

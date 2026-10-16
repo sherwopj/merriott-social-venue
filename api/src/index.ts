@@ -32,7 +32,7 @@ function calendarIdForRoom(room: string | undefined): string | undefined {
 }
 
 const bookingsSheetId = process.env.GOOGLE_BOOKINGS_SHEET_ID
-const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:AE1000'
+const bookingsSheetRange = process.env.GOOGLE_BOOKINGS_SHEET_RANGE || 'A2:AF1000'
 const bookingsSheetConfigured = Boolean(bookingsSheetId && serviceAccountJson)
 
 const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID
@@ -884,6 +884,7 @@ type BookingFields = {
   sendCopyToHirer?: boolean
   barOpenTime?: string
   barCloseTime?: string
+  clubWillClean?: boolean
 }
 
 const BAR_NORMAL_OPEN_MINUTES = 19 * 60 // the bar normally opens at 7pm
@@ -981,10 +982,11 @@ function buildBookingEventDescription(params: {
   attendees?: string | number
   exemption?: string
   notes?: string
+  clubWillClean?: boolean
 }): string {
   const {
     reference, paymentLine, breakdownLines, paymentIntentId,
-    name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes,
+    name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, clubWillClean,
   } = params
   return `Provisional Booking Request
 Reference: ${reference}
@@ -1004,7 +1006,7 @@ Booking Details:
 - Event Type: ${eventType || 'N/A'}
 - Attendees: ${attendees || 'N/A'}
 - Exemption status: ${exemption || 'none'}
-
+${clubWillClean ? '\n⚠️ CLEANING: Hirer has opted out of cleaning up — the club will clean after this event (cleaning deposit retained to cover cleaning costs).\n' : ''}
 Additional Notes:
 ${notes || 'None'}
 `
@@ -1046,6 +1048,7 @@ type BookingRecord = {
   feeRefundedAmount: number
   depositRefundedAmount: number
   barSurchargeRefundedAmount: number
+  clubWillClean: boolean
 }
 
 function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
@@ -1053,7 +1056,7 @@ function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
     , reference, status, paymentMethod, paid, date, startTime, endTime,
     eventType, attendees, exemption, barOpenTime, notes, name, email, phone, address,
     feeAmount, depositAmount, barSurchargeAmount, total, calendarEventId, calendarEventLink, paymentIntentId, createdBy,
-    lastUpdatedBy, barCloseTime, feeRefundedAmount, depositRefundedAmount, barSurchargeRefundedAmount,
+    lastUpdatedBy, barCloseTime, feeRefundedAmount, depositRefundedAmount, barSurchargeRefundedAmount, , clubWillClean,
   ] = row
   if (!reference || !reference.trim()) return null
 
@@ -1090,6 +1093,7 @@ function parseBookingRow(row: string[]): Omit<BookingRecord, 'row'> | null {
     feeRefundedAmount: Number(feeRefundedAmount) || 0,
     depositRefundedAmount: Number(depositRefundedAmount) || 0,
     barSurchargeRefundedAmount: Number(barSurchargeRefundedAmount) || 0,
+    clubWillClean: parseYesNo(clubWillClean),
   }
 }
 
@@ -1132,6 +1136,7 @@ function bookingRowValues(b: {
   feeRefundedAmount: number
   depositRefundedAmount: number
   barSurchargeRefundedAmount: number
+  clubWillClean: boolean
 }): string[] {
   return [
     new Date().toISOString(),
@@ -1165,6 +1170,7 @@ function bookingRowValues(b: {
     String(b.depositRefundedAmount || 0),
     String(b.barSurchargeRefundedAmount || 0),
     b.paymentIntentId ? stripePaymentDashboardUrl(b.paymentIntentId) : '',
+    b.clubWillClean ? 'Yes' : 'No',
   ]
 }
 
@@ -1173,7 +1179,7 @@ function bookingRowValues(b: {
 // returns it already parsed, since every admin action needs both.
 async function getBookingByReference(reference: string): Promise<{ row: number; booking: BookingRecord } | null> {
   try {
-    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:AE' })
+    const response = await sheets.spreadsheets.values.get({ spreadsheetId: bookingsSheetId, range: 'A:AF' })
     const rows: string[][] = response.data.values || []
     const index = rows.findIndex((row) => (row[1] ?? '').trim() === reference)
     if (index === -1) return null
@@ -1213,7 +1219,7 @@ async function createBookingRecord(
     notifyCommittee = true,
     status = 'provisional',
   } = options
-  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, sendCopyToHirer, barOpenTime, barCloseTime } = fields
+  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, sendCopyToHirer, barOpenTime, barCloseTime, clubWillClean } = fields
   const amounts = computeAmountDue(exemption, barOpenTime, barCloseTime)
   const breakdownLines = formatAmountBreakdown(amounts, barOpenTime, barCloseTime)
   const paymentLine = paymentStatusLine(paymentMethod, paid, amounts.total)
@@ -1232,7 +1238,7 @@ async function createBookingRecord(
       const eventSummary = buildBookingEventSummary(name, phone, reference, status, paid)
       const eventDescription = buildBookingEventDescription({
         reference, paymentLine, breakdownLines, paymentIntentId,
-        name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes,
+        name, email, phone, address, date, startTime, endTime, eventType, attendees, exemption, notes, clubWillClean,
       })
       const calendarRes = await calendar.events.insert({
         calendarId,
@@ -1300,6 +1306,8 @@ async function createBookingRecord(
 
           ${notes ? `<h3>Notes:</h3><p>${notes}</p>` : ''}
 
+          ${clubWillClean ? '<p style="color:#b45309;"><strong>⚠️ Cleaning:</strong> Hirer has opted out of cleaning up — the club will clean after this event (cleaning deposit retained to cover cleaning costs).</p>' : ''}
+
           ${calendarLinkSection}
           ${paymentLinkSection}
 
@@ -1324,7 +1332,7 @@ async function createBookingRecord(
       const nextRow = await getNextEmptyBookingRow()
       await sheets.spreadsheets.values.update({
         spreadsheetId: bookingsSheetId,
-        range: `A${nextRow}:AE${nextRow}`,
+        range: `A${nextRow}:AF${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [bookingRowValues({
@@ -1357,6 +1365,7 @@ async function createBookingRecord(
             feeRefundedAmount: 0,
             depositRefundedAmount: 0,
             barSurchargeRefundedAmount: 0,
+            clubWillClean: clubWillClean || false,
           })],
         },
       })
@@ -1388,6 +1397,7 @@ app.post('/api/bookings', async (req, res) => {
     paymentMethod,
     barOpenTime,
     barCloseTime,
+    clubWillClean,
   } = req.body ?? {}
 
   // Honeypot anti-spam check
@@ -1414,6 +1424,7 @@ app.post('/api/bookings', async (req, res) => {
     sendCopyToHirer: Boolean(sendCopyToHirer),
     barOpenTime: barOpenTime || undefined,
     barCloseTime: barCloseTime || undefined,
+    clubWillClean: Boolean(clubWillClean),
   }
 
   if (paymentMethod === 'in_person') {
@@ -1468,6 +1479,7 @@ app.post('/api/bookings', async (req, res) => {
         sendCopyToHirer: sendCopyToHirer ? 'yes' : 'no',
         barOpenTime: barOpenTime || '',
         barCloseTime: barCloseTime || '',
+        clubWillClean: clubWillClean ? 'yes' : 'no',
       },
     })
     res.json({ ok: true, url: session.url })
@@ -1535,6 +1547,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         sendCopyToHirer: metadata.sendCopyToHirer === 'yes',
         barOpenTime: metadata.barOpenTime || undefined,
         barCloseTime: metadata.barCloseTime || undefined,
+        clubWillClean: metadata.clubWillClean === 'yes',
       }
       const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
       await createBookingRecord(fields, metadata.reference ?? session.id, 'online', { paymentIntentId })
@@ -1584,7 +1597,7 @@ app.post('/api/admin/bookings', async (req, res) => {
 
   const {
     name, email, phone, address, date, startTime, endTime, eventType, attendees,
-    exemption, notes, barOpenTime, barCloseTime, paymentMethod, paid, confirmed,
+    exemption, notes, barOpenTime, barCloseTime, paymentMethod, paid, confirmed, clubWillClean,
   } = req.body ?? {}
 
   if (!name || !email || !phone || !date) {
@@ -1602,6 +1615,7 @@ app.post('/api/admin/bookings', async (req, res) => {
     sendCopyToHirer: false,
     barOpenTime: barOpenTime || undefined,
     barCloseTime: barCloseTime || undefined,
+    clubWillClean: Boolean(clubWillClean),
   }
 
   await createBookingRecord(fields, reference, paymentMethod, {
@@ -1633,7 +1647,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
   if (!found) return
   const { row, booking: existing } = found
 
-  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, notes, confirmed } = req.body ?? {}
+  const { name, email, phone, address, date, startTime, endTime, eventType, attendees, notes, confirmed, clubWillClean } = req.body ?? {}
   if (!name || !email || !phone || !date) {
     res.status(400).json({ error: 'name, email, phone, and date are required.' })
     return
@@ -1665,6 +1679,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
     feeRefundedAmount: existing.feeRefundedAmount,
     depositRefundedAmount: existing.depositRefundedAmount,
     barSurchargeRefundedAmount: existing.barSurchargeRefundedAmount,
+    clubWillClean: clubWillClean !== undefined ? Boolean(clubWillClean) : existing.clubWillClean,
     name: String(name).trim(),
     email: String(email).trim(),
     phone: String(phone).trim(),
@@ -1692,6 +1707,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
             name: updated.name, email: updated.email, phone: updated.phone, address: updated.address,
             date: updated.date, startTime: updated.startTime, endTime: updated.endTime, eventType: updated.eventType,
             attendees: updated.attendees, exemption: existing.exemption, notes: updated.notes,
+            clubWillClean: updated.clubWillClean,
           }),
           start: { dateTime: `${updated.date}T${updated.startTime || '00:00'}:00`, timeZone: 'Europe/London' },
           end: { dateTime: `${updated.date}T${updated.endTime || '00:00'}:00`, timeZone: 'Europe/London' },
@@ -1705,7 +1721,7 @@ app.put('/api/admin/bookings/:reference', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:AE${row}`,
+      range: `A${row}:AF${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
@@ -1759,7 +1775,7 @@ app.post('/api/admin/bookings/:reference/confirm', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:AE${row}`,
+      range: `A${row}:AF${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
@@ -1805,7 +1821,7 @@ app.delete('/api/admin/bookings/:reference', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:AE${row}`,
+      range: `A${row}:AF${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({
@@ -1890,7 +1906,7 @@ app.put('/api/admin/bookings/:reference/refund', async (req, res) => {
   try {
     await sheets.spreadsheets.values.update({
       spreadsheetId: bookingsSheetId,
-      range: `A${row}:AE${row}`,
+      range: `A${row}:AF${row}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [bookingRowValues({

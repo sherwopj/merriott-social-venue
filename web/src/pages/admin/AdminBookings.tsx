@@ -40,6 +40,7 @@ export type Booking = {
   feeRefundedAmount: number
   depositRefundedAmount: number
   barSurchargeRefundedAmount: number
+  clubWillClean: boolean
 }
 
 type BookingsResponse = {
@@ -198,6 +199,7 @@ export function AdminBookings() {
                       {b.name} <span className="field-hint">(Ref: {b.reference})</span>
                       {b.status === 'cancelled' && <span className="status-pill status-pill--cancelled">Cancelled</span>}
                       {b.status !== 'cancelled' && b.date < today && <span className="status-pill status-pill--past">Past</span>}
+                      {b.clubWillClean && <span className="status-pill status-pill--clean">Club Cleans</span>}
                     </p>
                     <p className="manage-event-row__date">
                       {statusLabel(b.status)} · {b.paid ? 'Paid' : 'Awaiting payment'} ·{' '}

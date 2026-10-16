@@ -218,6 +218,7 @@ export function Book() {
   const [barCloseTime, setBarCloseTime] = useState('19:00')
   const [barTimeError, setBarTimeError] = useState<string | null>(null)
   const [exemption, setExemption] = useState('none')
+  const [clubWillClean, setClubWillClean] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'in_person'>('online')
   const [declaration, setDeclaration] = useState(false)
   const [sendCopy, setSendCopy] = useState(true)
@@ -329,6 +330,7 @@ export function Book() {
           notes,
           barOpenTime: barNeeded ? barOpenTime : '',
           barCloseTime: barNeeded ? barCloseTime : '',
+          clubWillClean,
         }),
       })
       const body = (await res.json().catch(() => ({}))) as { ok?: boolean; url?: string; reference?: string; error?: string }
@@ -386,6 +388,7 @@ export function Book() {
     setBarCloseTime('19:00')
     setBarTimeError(null)
     setExemption('none')
+    setClubWillClean(false)
     setDeclaration(false)
     setNotes('')
     setSelectedSlot(null)
@@ -419,7 +422,7 @@ export function Book() {
 
   return (
     <section className="section">
-      <div className="container container--narrow">
+      <div className="container container--book">
         <FunctionRoomCarousel />
         <h1 className="page-title">Book the function room</h1>
         <p className="lede">
@@ -617,6 +620,17 @@ export function Book() {
                   </select>
                   <p className="field-hint">The £30 cleaning deposit still applies in all cases, and committee discretion can waive it in exceptional circumstances.</p>
                 </div>
+                <label className="checkbox-field">
+                  <input type="checkbox" checked={clubWillClean} onChange={(e) => setClubWillClean(e.target.checked)} />
+                  <span>I don't want to clean up after the event</span>
+                </label>
+                {clubWillClean && (
+                  <p className="field-hint">
+                    No problem — the club will clean up after your event instead. Your £30 cleaning deposit will be
+                    used to cover the cost of cleaning rather than being refunded. This doesn't change the amount due
+                    now, since the deposit is always collected when booking.
+                  </p>
+                )}
                 <label className="field">
                   <span>Additional Notes</span>
                   <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Any specific setup needs or requests?" />

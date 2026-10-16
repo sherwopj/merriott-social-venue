@@ -285,6 +285,10 @@
   max-width: 1400px;
 }
 
+.container--book {
+  max-width: 860px;
+}
+
 .section {
   padding: 2.5rem 0;
 }
@@ -325,10 +329,11 @@
 .function-room-carousel {
   position: relative;
   width: 100%;
+  max-width: 560px;
+  margin: 0 auto 1.5rem;
   aspect-ratio: 1 / 1;
   border-radius: 8px;
   overflow: hidden;
-  margin-bottom: 1.5rem;
   background: var(--color-bg-elevated);
 }
 
@@ -566,6 +571,11 @@
 .status-pill--past {
   background: rgba(215, 161, 69, 0.15);
   color: var(--color-text-muted);
+}
+
+.status-pill--clean {
+  background: rgba(100, 160, 220, 0.18);
+  color: #8fc1f0;
 }
 
 .manage-event-row__cal-link {

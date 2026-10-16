@@ -36,6 +36,7 @@ export function BookingAdminForm({
   const [barCloseTime, setBarCloseTime] = useState(existingBooking?.barCloseTime || '19:00')
   const [barTimeError, setBarTimeError] = useState<string | null>(null)
   const [notes, setNotes] = useState(existingBooking?.notes ?? '')
+  const [clubWillClean, setClubWillClean] = useState(existingBooking?.clubWillClean ?? false)
   const [paid, setPaid] = useState(existingBooking?.paid ?? false)
   const [confirmed, setConfirmed] = useState(existingBooking?.status === 'confirmed')
   const [submitting, setSubmitting] = useState(false)
@@ -64,7 +65,7 @@ export function BookingAdminForm({
         ? apiUrl(`/api/admin/bookings/${existingBooking!.reference}`)
         : apiUrl('/api/admin/bookings')
 
-      const body: Record<string, unknown> = { name, email, phone, address, date, startTime, endTime, eventType, attendees, notes, confirmed }
+      const body: Record<string, unknown> = { name, email, phone, address, date, startTime, endTime, eventType, attendees, notes, confirmed, clubWillClean }
       if (!isEditing) {
         // Exemption and bar-opening times are only ever set at creation — editing an existing
         // booking can't change them, since they determine the price.
@@ -252,6 +253,10 @@ export function BookingAdminForm({
             </select>
           </label>
         )}
+        <label className="checkbox-field">
+          <input type="checkbox" checked={clubWillClean} onChange={(e) => setClubWillClean(e.target.checked)} />
+          <span>Hirer doesn't want to clean up — the club will clean (deposit retained for cleaning)</span>
+        </label>
         <label className="field">
           <span>Additional Notes</span>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />

@@ -91,7 +91,10 @@ export function BookingViewModal({
 
         <div className="admin-modal__section">
           <div className="admin-modal__row"><span>Hire fee</span><strong>{formatPounds(booking.feeAmount)}</strong></div>
-          <div className="admin-modal__row"><span>Cleaning deposit</span><strong>{formatPounds(booking.depositAmount)}</strong></div>
+          <div className="admin-modal__row">
+            <span>Cleaning deposit</span>
+            <strong>{formatPounds(booking.depositAmount)}{booking.clubWillClean ? ' (club cleans)' : ''}</strong>
+          </div>
           {booking.barSurchargeAmount > 0 && (
             <div className="admin-modal__row"><span>Bar surcharge</span><strong>{formatPounds(booking.barSurchargeAmount)}</strong></div>
           )}

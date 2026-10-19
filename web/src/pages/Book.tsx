@@ -670,7 +670,8 @@ export function Book() {
               <div className="book-form__section book-form__section--terms">
                 <h2 className="section-title section-title--small">Terms & Declaration</h2>
                 <ul className="terms-list">
-                  <li>£25 room hire fee and a £30 cleaning deposit are payable when booking. The deposit is refundable if the room and kitchen are left clean, tidy, and undamaged.</li>
+                  <li>£25 room hire fee and a £30 cleaning deposit are payable when booking. For a full refund, the room and kitchen must be returned to the state you found them in: floors hoovered and mopped, tables and chairs wiped down, the kitchen left clean, and everything put away.</li>
+                  <li>If anything isn't perfectly clean, tidy, and ready to go when you arrive to set up, please let us know straight away — that way you won't be held responsible for a previous hirer's cleanup when your deposit is assessed.</li>
                   <li>Wakes and registered charity events are fee-free; large adult evening events with the bar open may be eligible for a fee refund after the event if attendance is 15+.</li>
                   <li>The hirer is responsible for guests’ conduct, room capacity, and keeping exits clear at all times.</li>
                   <li>No outside alcohol, no smoking indoors, no candles, confetti, or fireworks without prior committee agreement, and nothing may be stuck, taped, or pinned to the walls.</li>

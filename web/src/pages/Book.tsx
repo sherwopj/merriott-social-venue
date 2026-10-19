@@ -619,10 +619,9 @@ export function Book() {
                     <option value="charity">Registered charity event</option>
                   </select>
                   <p className="field-hint">
-                    The £30 cleaning deposit still applies in all cases, and committee discretion can waive it in
-                    exceptional circumstances. For a full refund, the room and kitchen must be returned to the state
-                    you found them in: floors hoovered and mopped, tables and chairs wiped down, the kitchen left
-                    clean, and everything put away.
+                    The £30 cleaning deposit still applies in all cases. For a full refund, the room and kitchen must
+                    be returned to the state you found them in: floors hoovered and mopped, tables and chairs wiped
+                    down, the kitchen left clean, and everything put away.
                   </p>
                   <p className="field-hint">
                     If anything isn't perfectly clean, tidy, and ready to go when you arrive to set up, please let us

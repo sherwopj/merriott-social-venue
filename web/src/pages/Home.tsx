@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Gallery } from '../components/Gallery'
 import banner from '../assets/banner.png'
+import safeguardingPolicyPdf from '../assets/MSV_Safeguarding_Policy.pdf'
 
 const EMAIL_ADDRESS = 'merriottsocialvenue@gmail.com'
 
@@ -43,7 +44,8 @@ export function Home() {
             <br />
             We are a non profit organisation and are supported by our volunteers. We are always looking for more volunteers, so if you think you could support us, please get in touch!
             <br />
-            You can view our <Link to="/constitution">constitution</Link> here.
+            You can view our <Link to="/constitution">constitution</Link> and{' '}
+            <a href={safeguardingPolicyPdf} target="_blank" rel="noopener noreferrer">safeguarding policy</a> here.
           </p>
         </div>
       </section>

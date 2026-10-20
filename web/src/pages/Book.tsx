@@ -5,6 +5,7 @@ import { EXEMPTION_LABELS, computeAmountBreakdown } from '../lib/bookingPricing'
 import { SlotAvailabilityCalendar } from '../components/SlotAvailabilityCalendar'
 import { InfoTip } from '../components/InfoTip'
 import functionRoomHirePdf from '../assets/MSV_Function_Room_Hire_Policy_and_Form.pdf'
+import safeguardingPolicyPdf from '../assets/MSV_Safeguarding_Policy.pdf'
 import functionRoomImage1 from '../assets/function-room/function-room-1.png'
 import functionRoomImage2 from '../assets/function-room/function-room-2.png'
 import functionRoomImage3 from '../assets/function-room/function-room-3.png'
@@ -438,6 +439,14 @@ export function Book() {
             rel="noopener noreferrer"
           >
             View hire policy and form PDF
+          </a>
+          <a
+            className="btn btn--ghost"
+            href={safeguardingPolicyPdf}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View safeguarding policy PDF
           </a>
         </div>
 
